@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 549a820dbaefbf143a57ec3e36ea693a, type: 3}
+  m_Name: P1ControlsProfile
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerControlsProfile
+  HorizontalAxis: HorizontalP2
+  VerticalAxis: VerticalP2
+  runKey: 116
+  blockKey: 103
+  highPunchKey: 114
+  highKickKey: 121
+  lowPunchKey: 102
+  lowKickKey: 104
+  startKey: 49
+  selectKey: 50

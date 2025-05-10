@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd6f6b332a9f3b845b5f33220a70c8e2, type: 3}
+  m_Name: RoundAudioBank
+  m_EditorClassIdentifier: Assembly-CSharp::RoundAudioBank
+  clips:
+  - evt: 0
+    resourcesPath: Arcade/ShaoKahn/mk3-09025
+  - evt: 1
+    resourcesPath: Arcade/ShaoKahn/mk3-09030
+  - evt: 2
+    resourcesPath: Arcade/ShaoKahn/mk3-09035
+  - evt: 3
+    resourcesPath: Arcade/ShaoKahn/mk3-09020
+  - evt: 4
+    resourcesPath: Arcade/ShaoKahn/mk3-09000
+  - evt: 5
+    resourcesPath: Arcade/ShaoKahn/mk3-09005
+  - evt: 6
+    resourcesPath: Arcade/ShaoKahn/mk3-09015
+  - evt: 7
+    resourcesPath: Arcade/ShaoKahn/mk3-09145
+  - evt: 8
+    resourcesPath: Arcade/UI/mk3-01030
+  - evt: 9
+    resourcesPath: Arcade/UI/mk3-01060
+  - evt: 10
+    resourcesPath: Arcade/Names/mk3-21120
