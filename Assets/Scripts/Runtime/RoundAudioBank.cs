@@ -1,41 +1,52 @@
 ﻿using UnityEngine;
 
-public enum GameEvent
-{
-    RoundOne, RoundTwo, RoundThree,
-    Fight, FinishHim, FinishHer,
-    Flawless, Wins,
-    LastHitWarning, Last10SecTick,
-    Name_Scorpion
-}
-
-[CreateAssetMenu(menuName = "UMK3/Audio/Round Audio Bank")]
+[CreateAssetMenu(fileName = "RoundAudioBank", menuName = "UMK3/Round Audio Bank")]
 public class RoundAudioBank : ScriptableObject
 {
-    [System.Serializable]
-    public struct ClipRef
-    {
-        public GameEvent evt;
-        public string    resourcesPath; // e.g. "Arcade/ShaoKahn/mk3-09020"
-    }
-
+    /* ----------------------------------------------------------
+     *  Generic combat S-FX (landed hit & blocked hit)
+     * ---------------------------------------------------------- */
     public AudioClip hitClip;
     public AudioClip blockClip;
-    public ClipRef[] clips;
 
-    AudioClip _Find(GameEvent e)
+    /* ----------------------------------------------------------
+     *  Announcer VO table — kept under the original name
+     *  so DefaultUMK3DataGenerator.cs continues to compile.
+     * ---------------------------------------------------------- */
+    [System.Serializable]
+    public struct ClipRef          // <-- original name expected by generator
     {
-        foreach (var c in clips)
-            if (c.evt == e)
-                return Resources.Load<AudioClip>(c.resourcesPath);
-        Debug.LogWarning($"No clip for {e}");
-        return null;
+        public GameEvent evt;
+        public string    resourcesPath;   // optional Resources.Load fallback
+        public AudioClip clip;            // direct reference
+        [Range(0f,1f)] public float volume;
     }
 
-    public void Play(AudioSource src, GameEvent e, float vol = 1f)
+    public ClipRef[] clips;               // <-- original array name
+
+    /* ----------------------------------------------------------
+     *  Runtime play helper
+     * ---------------------------------------------------------- */
+    public void Play(AudioSource src, GameEvent e, float overrideVol = 1f)
     {
-        var clip = _Find(e);
-        if (clip != null)
-            src.PlayOneShot(clip, vol);
+        foreach (var c in clips)
+        {
+            if (c.evt != e) continue;
+
+            AudioClip clipToPlay = c.clip;
+            if (!clipToPlay && !string.IsNullOrEmpty(c.resourcesPath))
+                clipToPlay = Resources.Load<AudioClip>(c.resourcesPath);
+
+            if (clipToPlay)
+            {
+                src.PlayOneShot(clipToPlay, c.volume * overrideVol);
+            }
+            else
+            {
+                Debug.LogWarning($"RoundAudioBank: no clip for {e}");
+            }
+            return;
+        }
+        Debug.LogWarning($"RoundAudioBank: event {e} not found");
     }
 }

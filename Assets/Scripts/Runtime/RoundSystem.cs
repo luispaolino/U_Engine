@@ -1,153 +1,185 @@
-﻿using UnityEngine;
+﻿using System.Collections;
+using UnityEngine;
 using UnityEngine.UI;
-using System.Collections;
-using UMK3;
+using UMK3; // for FighterCharacter, GameEvent, etc.
 
+/// <summary>
+/// Controls round flow: intros, fades, timer, announcements, win logic.
+/// Uses URP fade pass and freezes fighters/physics throughout.
+/// Implements two-round match with draws counting as rounds.
+/// Fade durations are configurable via inspector.
+/// </summary>
 public class RoundSystem : MonoBehaviour
 {
+    [Header("Fighters")]
     public FighterCharacter fighterA;
     public FighterCharacter fighterB;
 
+    [Header("UI")]
     public Text centerMessage;
     public Text timerText;
     public Text scoreA;
     public Text scoreB;
 
-    public int   timeLimit    = 90;
-    public int   roundsToWin  = 2;
-    public float freezeIntro  = 1.5f;
-    public float fightMsgDur  = 1.0f;
-    public float koFreeze     = 0.5f;
-    public float finishWindow = 4.0f;
+    [Header("Settings")]
+    public int timeLimit = 90;
+    public int roundsToWin = 2;
+    public float introFreeze = 1.2f;
+    public float fightFlash = 0.8f;
+    public float koFreeze = 0.4f;
 
-    enum MatchState { Intro, Fight, TimeUp, Finish, Win, Draw }
-    MatchState state;
-    int        timer;
-    int        winsA, winsB;
-    bool       matchOver;
+    [Header("Fade Settings")]
+    public float fadeDuration = 0.5f;            // fade in/out between resets
+    public float gameOverFadeDuration = 0.8f;
 
-    void Start() => StartCoroutine(MatchRoutine());
+    private int roundTimer;
+    private int winsA, winsB;
+    private bool lowHealthPlayed;
 
-    IEnumerator MatchRoutine()
+    void Start()
     {
-        while (!matchOver)
-        {
-            yield return StartCoroutine(RoundRoutine());
-            if (!matchOver) yield return new WaitForSeconds(1f);
-        }
+        // start with screen black
+        if (FadeController.I != null)
+            FadeController.I.fadeMaterial.SetFloat("Intensity", 1f);
+        // ensure fighters frozen
+        fighterA.ForcePaused(true);
+        fighterB.ForcePaused(true);
+        // begin first round
+        StartCoroutine(MatchLoop());
     }
 
-    IEnumerator RoundRoutine()
+    void FixedUpdate()
     {
-        // INTRO
-        state = MatchState.Intro;
-        timer = timeLimit;
-        centerMessage.text = $"Round {winsA + winsB + 1}";
-        Freeze(true);
-        yield return new WaitForSeconds(freezeIntro);
+        FaceOpponent(fighterA, fighterB);
+        FaceOpponent(fighterB, fighterA);
+    }
 
-        centerMessage.text = "Fight!";
-        yield return new WaitForSeconds(fightMsgDur);
-        centerMessage.text = "";
-        Freeze(false);
-        state = MatchState.Fight;
+    void FaceOpponent(FighterCharacter me, FighterCharacter foe)
+    {
+        bool faceRight = foe.transform.position.x > me.transform.position.x;
+        me.core.SetFacing(faceRight);
+        if (me.graphics != null)
+            me.graphics.localRotation = Quaternion.Euler(0, faceRight ? 0 : 180, 0);
+        else if (me.GetComponent<SpriteRenderer>() is var sr && sr)
+            sr.flipX = !faceRight;
+    }
 
-        // FIGHT LOOP
-        while (state == MatchState.Fight)
-        {
-            yield return new WaitForSeconds(1f);
-            timer--;
-            timerText.text = timer.ToString();
-
-            if (fighterA.Health <= 0 || fighterB.Health <= 0)
-            {
-                state = MatchState.Finish;
-                break;
-            }
-            if (timer <= 0)
-            {
-                state = MatchState.TimeUp;
-                break;
-            }
-        }
-
-        // TIME UP
-        if (state == MatchState.TimeUp)
-        {
-            Freeze(true);
-            centerMessage.text = "TIME UP!";
-            yield return new WaitForSeconds(1.5f);
-            AwardTimeUp();
-            centerMessage.text = "";
-            yield break;
-        }
-
-        // KO → Finish Him/Her
-        Freeze(true);
-        yield return new WaitForSeconds(koFreeze);
-        Freeze(false);
-
-        var loser  = fighterA.Health <= 0 ? fighterA : fighterB;
-        var winner = loser == fighterA ? fighterB : fighterA;
-
-        loser.ForceState(CharacterState.Knockdown);
-        winner.ForceState(CharacterState.GetUp);
-
-        centerMessage.text = loser.gender == Gender.Female
-            ? "Finish Her!" : "Finish Him!";
-
-        yield return new WaitForSeconds(finishWindow);
-
-        // WINNER ANNOUNCE
-        centerMessage.text = winner == fighterA
-            ? "Player 1 Wins" : "Player 2 Wins";
-
-        if (winner == fighterA) winsA++;
-        else winsB++;
-
+    IEnumerator MatchLoop()
+    {
+        winsA = winsB = 0;
         UpdateScoreUI();
-        Freeze(true);
-        yield return new WaitForSeconds(2f);
-        centerMessage.text = "";
 
-        if (winsA == roundsToWin || winsB == roundsToWin)
+        while (true)
         {
-            matchOver = true;
-            centerMessage.text = winner == fighterA
-                ? "Player 1 Wins Match"
-                : "Player 2 Wins Match";
-            yield return new WaitForSeconds(3f);
+            // setup and fade in for new match start or after game over
+            ResetRoundState();
+            yield return FadeController.I.FadeIn(fadeDuration);
 
-            // reset match
-            winsA = winsB = 0;
-            UpdateScoreUI();
-            centerMessage.text = "";
-            matchOver = false;
+            // play up to roundsToWin rounds
+            for (int rd = 1; rd <= roundsToWin; rd++)
+        {
+            // run the round
+            yield return RoundLoop(rd);
+
+            // if someone won, proceed to Game Over
+            if (winsA == roundsToWin || winsB == roundsToWin)
+                break;
+
+            // only fade between rounds, not after the last one
+            if (rd < roundsToWin)
+            {
+                yield return FadeController.I.FadeOut(fadeDuration);
+                yield return FadeController.I.FadeIn(fadeDuration);
+            }
         }
 
-        ResetRound();
+            // game over after two rounds or win
+            yield return GameOver();
+        }
     }
 
-    void Freeze(bool b)
+    IEnumerator RoundLoop(int roundNum)
     {
-        fighterA.ForcePaused(b);
-        fighterB.ForcePaused(b);
-    }
+        // announce round
+        centerMessage.text = $"ROUND {roundNum}";
+        AudioRoundManager.Play(
+            roundNum == 1 ? GameEvent.RoundOne : GameEvent.RoundTwo);
+        yield return new WaitForSeconds(introFreeze);
+        centerMessage.text = string.Empty;
 
-    void AwardTimeUp()
-    {
-        if (fighterA.Health == fighterB.Health)
-            centerMessage.text = "DRAW!";
-        else if (fighterA.Health > fighterB.Health)
+        // announce fight
+        centerMessage.text = "FIGHT!";
+        AudioRoundManager.Play(GameEvent.Fight);
+        yield return new WaitForSeconds(fightFlash);
+        centerMessage.text = string.Empty;
+
+        // start combat
+        fighterA.ForcePaused(false);
+        fighterB.ForcePaused(false);
+        UnfreezePhysics();
+        ResetAnimations();
+        roundTimer = timeLimit;
+        lowHealthPlayed = false;
+
+        // timer and battle loop
+        while (true)
+        {
+            timerText.text = roundTimer.ToString("00");
+            if (roundTimer <= 10 && roundTimer > 0)
+                AudioRoundManager.Play(GameEvent.Last10SecTick);
+            if (!lowHealthPlayed && (fighterA.Health <= 10 || fighterB.Health <= 10))
+            {
+                AudioRoundManager.Play(GameEvent.LastHitWarning);
+                lowHealthPlayed = true;
+            }
+            if (fighterA.Health <= 0 || fighterB.Health <= 0 || roundTimer <= 0)
+                break;
+            yield return new WaitForSeconds(1f);
+            roundTimer--;
+        }
+
+        // freeze at round end
+        fighterA.ForcePaused(true);
+        fighterB.ForcePaused(true);
+        FreezeAnimations();
+        FreezePhysics();
+        timerText.text = "00";
+        yield return new WaitForSeconds(koFreeze);
+
+        // announce result
+        if (fighterA.Health > fighterB.Health)
         {
             winsA++;
-            centerMessage.text = "Player 1 Wins";
+            centerMessage.text = "PLAYER 1 WINS";
+            AudioRoundManager.Play(GameEvent.Wins);
+        }
+        else if (fighterB.Health > fighterA.Health)
+        {
+            winsB++;
+            centerMessage.text = "PLAYER 2 WINS";
+            AudioRoundManager.Play(GameEvent.Wins);
         }
         else
         {
-            winsB++;
-            centerMessage.text = "Player 2 Wins";
+            centerMessage.text = "DRAW!";
         }
+        UpdateScoreUI();
+        yield return new WaitForSeconds(2f);
+    }
+
+    IEnumerator GameOver()
+    {
+        // display game over
+        centerMessage.text = "GAME OVER";
+        AudioRoundManager.Play(GameEvent.Flawless);
+        yield return new WaitForSeconds(3f);
+
+        // fade out
+        yield return FadeController.I.FadeOut(gameOverFadeDuration);
+        centerMessage.text = string.Empty;
+
+        // reset match and loop back
+        winsA = winsB = 0;
         UpdateScoreUI();
     }
 
@@ -157,9 +189,48 @@ public class RoundSystem : MonoBehaviour
         scoreB.text = new string('■', winsB);
     }
 
-    void ResetRound()
+    void ResetRoundState()
     {
-        fighterA.RoundReset(new Vector3(-2, 0, 0), true);
-        fighterB.RoundReset(new Vector3( 2, 0, 0), false);
+        fighterA.RoundReset(new Vector2(-2f, 0f), true);
+        fighterB.RoundReset(new Vector2(2f, 0f), false);
+        UnfreezePhysics();
+        ResetPhysicsVelocity();
+        ResetAnimations();
+    }
+
+    void FreezePhysics()
+    {
+        if (fighterA.TryGetComponent<Rigidbody2D>(out var rba)) rba.simulated = false;
+        if (fighterB.TryGetComponent<Rigidbody2D>(out var rbb)) rbb.simulated = false;
+    }
+
+    void UnfreezePhysics()
+    {
+        if (fighterA.TryGetComponent<Rigidbody2D>(out var rba)) rba.simulated = true;
+        if (fighterB.TryGetComponent<Rigidbody2D>(out var rbb)) rbb.simulated = true;
+    }
+
+    void ResetPhysicsVelocity()
+    {
+        if (fighterA.TryGetComponent<Rigidbody2D>(out var rba)) rba.linearVelocity = Vector2.zero;
+        if (fighterB.TryGetComponent<Rigidbody2D>(out var rbb)) rbb.linearVelocity = Vector2.zero;
+    }
+
+    void FreezeAnimations()
+    {
+        SetAnimatorSpeed(fighterA, 0f);
+        SetAnimatorSpeed(fighterB, 0f);
+    }
+
+    void ResetAnimations()
+    {
+        SetAnimatorSpeed(fighterA, 1f);
+        SetAnimatorSpeed(fighterB, 1f);
+    }
+
+    void SetAnimatorSpeed(FighterCharacter fc, float speed)
+    {
+        if (fc.GetComponentInChildren<Animator>() is Animator anim)
+            anim.speed = speed;
     }
 }

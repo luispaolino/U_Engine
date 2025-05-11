@@ -1,7 +1,14 @@
 fileFormatVersion: 2
 guid: 44ed449b5b56ed446a67e63f2b348c08
+AssetOrigin:
+  serializedVersion: 1
+  productId: 305932
+  packageName: Brawler Animations - Free
+  packageVersion: 1.0.1
+  assetPath: Assets/Brawler Animations Sample/Animations/Walk_B.fbx
+  uploadId: 744451
 ModelImporter:
-  serializedVersion: 22200
+  serializedVersion: 24200
   internalIDToNameTable: []
   externalObjects: {}
   materials:
@@ -16,8 +23,6 @@ ModelImporter:
     optimizeGameObjects: 0
     removeConstantScaleCurves: 0
     motionNodeName: 
-    rigImportErrors: 
-    rigImportWarnings: 
     animationImportErrors: 
     animationImportWarnings: 
     animationRetargetingWarnings: 
@@ -40,7 +45,7 @@ ModelImporter:
       lastFrame: 32
       wrapMode: 0
       orientationOffsetY: 0
-      level: 0
+      level: 0.03
       cycleOffset: 0
       loop: 0
       hasAdditiveReferencePose: 0
@@ -50,9 +55,9 @@ ModelImporter:
       loopBlendPositionY: 1
       loopBlendPositionXZ: 0
       keepOriginalOrientation: 1
-      keepOriginalPositionY: 1
+      keepOriginalPositionY: 0
       keepOriginalPositionXZ: 0
-      heightFromFeet: 0
+      heightFromFeet: 1
       mirror: 0
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
       curves: []
@@ -87,6 +92,9 @@ ModelImporter:
     maxBonesPerVertex: 4
     minBoneWeight: 0.001
     optimizeBones: 1
+    generateMeshLods: 0
+    meshLodGenerationFlags: 0
+    maximumMeshLod: -1
     meshOptimizationFlags: -1
     indexFormat: 0
     secondaryUVAngleDistortion: 8
@@ -900,8 +908,7 @@ ModelImporter:
     hasTranslationDoF: 1
     hasExtraRoot: 0
     skeletonHasParents: 1
-  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: 8595e0a7f8893ba46acdf8019eb5a8bf,
-    type: 3}
+  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: 8595e0a7f8893ba46acdf8019eb5a8bf, type: 3}
   autoGenerateAvatarMappingIfUnspecified: 1
   animationType: 3
   humanoidOversampling: 1
@@ -913,10 +920,3 @@ ModelImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 305932
-  packageName: Brawler Animations - Free
-  packageVersion: 1.0.1
-  assetPath: Assets/Brawler Animations Sample/Animations/Walk_B.fbx
-  uploadId: 744451

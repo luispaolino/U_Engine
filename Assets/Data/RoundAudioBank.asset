@@ -12,26 +12,54 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fd6f6b332a9f3b845b5f33220a70c8e2, type: 3}
   m_Name: RoundAudioBank
   m_EditorClassIdentifier: Assembly-CSharp::RoundAudioBank
+  hitClip: {fileID: 8300000, guid: 300c69a3f859da84083a660abc0053be, type: 3}
+  blockClip: {fileID: 8300000, guid: 82cac47063c2abe49befed6969b60513, type: 3}
   clips:
   - evt: 0
-    resourcesPath: Arcade/ShaoKahn/mk3-09025
+    resourcesPath: Arcade/Names/mk3-09025
+    clip: {fileID: 8300000, guid: 43d23b3aa393d984da8e99bee5693001, type: 3}
+    volume: 1
   - evt: 1
     resourcesPath: Arcade/ShaoKahn/mk3-09030
+    clip: {fileID: 8300000, guid: cf8fcd334f6a3304180bd403be40fa55, type: 3}
+    volume: 1
   - evt: 2
     resourcesPath: Arcade/ShaoKahn/mk3-09035
+    clip: {fileID: 8300000, guid: 2290c30adde66b34eb2d09cbd1951fba, type: 3}
+    volume: 1
   - evt: 3
     resourcesPath: Arcade/ShaoKahn/mk3-09020
+    clip: {fileID: 8300000, guid: 44d5ffa7597d3ec438dec633d47d9679, type: 3}
+    volume: 1
   - evt: 4
-    resourcesPath: Arcade/ShaoKahn/mk3-09000
+    resourcesPath: Arcade/UI/mk3-01060
+    clip: {fileID: 8300000, guid: 4cf7317c3328f6c48915bfd50079a24a, type: 3}
+    volume: 1
   - evt: 5
-    resourcesPath: Arcade/ShaoKahn/mk3-09005
+    resourcesPath: Arcade/UI/mk3-09005
+    clip: {fileID: 8300000, guid: 602d1c24fec69d84da4ad185dad7f1c3, type: 3}
+    volume: 1
   - evt: 6
     resourcesPath: Arcade/ShaoKahn/mk3-09015
+    clip: {fileID: 8300000, guid: 6f63403fbb2b6b443a80a1c4543d474a, type: 3}
+    volume: 1
   - evt: 7
     resourcesPath: Arcade/ShaoKahn/mk3-09145
-  - evt: 8
-    resourcesPath: Arcade/UI/mk3-01030
+    clip: {fileID: 8300000, guid: f6bea4a53e6430d47a724766bbd922b4, type: 3}
+    volume: 1
   - evt: 9
     resourcesPath: Arcade/UI/mk3-01060
+    clip: {fileID: 8300000, guid: 4cf7317c3328f6c48915bfd50079a24a, type: 3}
+    volume: 1
   - evt: 10
+    resourcesPath: Arcade/ShaoKahn/mk3-09145
+    clip: {fileID: 8300000, guid: f6bea4a53e6430d47a724766bbd922b4, type: 3}
+    volume: 1
+  - evt: 11
     resourcesPath: Arcade/Names/mk3-21120
+    clip: {fileID: 8300000, guid: 55c384792d6c3de4d897dfcd8eec5417, type: 3}
+    volume: 1
+  - evt: 8
+    resourcesPath: Arcade/Names/mk3-01060
+    clip: {fileID: 8300000, guid: 4cf7317c3328f6c48915bfd50079a24a, type: 3}
+    volume: 1

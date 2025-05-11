@@ -1,363 +1,348 @@
 using UnityEngine;
+using UMK3;   // MoveTableSO, ReactionTableSO, ThrowTableSO
 
+#region PSX-style enums & flags -------------------------------------------------
 public enum CharacterState
 {
-    Idle, Walking, Running, Crouch, Jumping,
-    Attacking, ThrowStartup, Throwing,
-    HitStun, AirHitStun, Knockdown, GetUp,
-    Recovery, BackDash, WakeRoll, Thrown
+    Idle, Walking, Running, Crouch,
+    BlockingHigh, BlockingLow, Jumping,
+
+    Attacking, HitStun, Knockdown,
+    BackDash, Thrown
 }
 
 public enum MovePhase { Startup, Active, Recovery }
 
+public enum AttackPower { Light, Medium, Heavy, Special }
+
+[System.Flags]
+public enum DmgFlag
+{
+    NONE        = 0,
+    DF_NO_CHIP  = 1 << 0,
+    DF_UNBLOCK  = 1 << 1     // same idea as SF_UNBLOCKABLE
+}
+#endregion
+
 public class FighterCharacterCore
 {
-    // ─── Public API ────────────────────────────────────────────────
+
+    [Header("Ground Detection")]
+    public Transform    groundCheck;       // a child empty at the character's feet
+    public float        groundCheckRadius = 0.1f;
+    public LayerMask    groundLayer;
+
+
+    // ── Public surface ───────────────────────────────────────────────────────
     public InputBuffer     InputBuf    { get; set; }
-    public MoveFrameData   CurrentMove => _currentMove;
+    public MoveFrameData   CurrentMove { get; private set; }
     public bool            IsPaused    { get; set; }
     public int             Health      { get; private set; }
-    public bool            FacingRight => _facingRight;
     public CharacterState  State       { get; private set; }
     public MovePhase       Phase       { get; private set; }
     public Vector3         Velocity    { get; private set; }
-    public bool            IsGrounded  { get; set; } = true;
+    public bool            FacingRight => _facingRight;
 
-    // ─── Data Tables ───────────────────────────────────────────────
-    readonly MoveTableSO     _moveTable;
-    readonly ReactionTableSO _reactionTable;
-    readonly ThrowTableSO    _throwTable;
+    // ── Data tables / refs ───────────────────────────────────────────────────
+    readonly MoveTableSO     moveTable;
+    readonly ReactionTableSO reactionTable;
+    readonly ThrowTableSO    throwTable;
 
-    // ─── Internal State ────────────────────────────────────────────
-    MoveFrameData _currentMove;
-    ThrowData     _currentThrow;
-    int           _frameLeft;
-    int blockStun, hitStun, airStun, lyingTimer, escapeWindow;
+    // ── Constants (straight from PSX tables) ─────────────────────────────────
+    readonly int[] block_len_tbl  = { 6, 8, 10, 10 };          // per AttackPower
+    readonly int[] push_dist_tbl  = { 1, 2, 3, 3  };           // demo values (pixels)
+    const int RUN_METER_MAX       = 128;                       // arbitrary scale
+    const int RUN_DRAIN_PER_FRAME = 2;
+    const int RUN_CRUSH_FRAMES    = 15;
+
+    const float WALK_SPEED  = 3.5f;
+    const float RUN_SPEED   = 6.0f;
+    const float JUMP_VY     = 7.0f;
+    const float JUMP_VX     = 3.0f;
+
+    // ── Internal runtime fields ──────────────────────────────────────────────
     bool _facingRight;
+    int  _phaseFrames;
+    int  hitStun, block_cnt, knockTimer, run_crush_cnt;
+    int  run_meter;
 
-    // ─── Tuning ─────────────────────────────────────────────────────
-    public float walkSpeed    = 2f;
-    public float runSpeed     = 4f;
-    public float jumpVelocity = 8f;
-    public float gravity      = 20f;
+    MoveFrameData _currentMove;
 
+    // ───────────────────────────────────────── ctor / reset
     public FighterCharacterCore(
-        MoveTableSO moves,
-        ReactionTableSO reactions,
-        ThrowTableSO throwsTable
-    ) {
-        _moveTable     = moves;
-        _reactionTable = reactions;
-        _throwTable    = throwsTable;
+        MoveTableSO mvTable,
+        ReactionTableSO reactTable,
+        ThrowTableSO thTable)
+    {
+        moveTable     = mvTable;
+        reactionTable = reactTable;
+        throwTable    = thTable;
         FullReset();
     }
 
     public void FullReset()
     {
-        Health        = 1000;
-        State         = CharacterState.Idle;
-        Phase         = MovePhase.Startup;
-        Velocity      = Vector3.zero;
-        _facingRight  = true;
-        blockStun     = hitStun = airStun = lyingTimer = escapeWindow = 0;
+        Health   = 1000;
+        run_meter= RUN_METER_MAX;
+        State    = CharacterState.Idle;
+        Phase    = MovePhase.Startup;
+        Velocity = Vector3.zero;
+
+        hitStun = block_cnt = knockTimer = run_crush_cnt = 0;
     }
 
-    public void SpawnAt(Vector2 position, bool faceRight)
-    {
-        _facingRight = faceRight;
-        Velocity     = Vector3.zero;
-        State        = CharacterState.Idle;
-        Phase        = MovePhase.Startup;
-    }
+    public void SpawnAt(Vector2 pos, bool faceRight) => _facingRight = faceRight;
+    public void SetFacing(bool right)                => _facingRight = right;
 
-    // ─── Main Loop ─────────────────────────────────────────────────
+    // ───────────────────────────────────────── Fixed-tick main
     public void FixedTick()
     {
         if (IsPaused) return;
 
-        // 1) timers
-        if (blockStun    > 0) blockStun--;
-        if (hitStun      > 0) hitStun--;
-        if (airStun      > 0) airStun--;
-        if (lyingTimer   > 0) lyingTimer--;
-        if (escapeWindow > 0) escapeWindow--;
+        /* ---- timers ---- */
+        if (hitStun   > 0 && --hitStun   == 0) State = CharacterState.Idle;
+        if (block_cnt > 0 && --block_cnt == 0) State = CharacterState.Idle;
+        if (knockTimer> 0 && --knockTimer== 0) State = CharacterState.Idle;
+        if (run_crush_cnt > 0) --run_crush_cnt;
 
-        // 2) freeze if stunned or in throw startup
-        if (blockStun>0 || hitStun>0 || airStun>0 || State==CharacterState.ThrowStartup)
-            return;
-
-        var f = InputBuf.State;
-
-        // 3) handle attacks & throws & jump-attacks
-        if (TryHandleAttacks(f)) return;
-
-        // 4) crouch enter/exit
-        if (IsGrounded && State==CharacterState.Idle && f.Down)
-        {
-            State    = CharacterState.Crouch;
-            Velocity = Vector3.zero;
-            return;
-        }
-        if (State==CharacterState.Crouch && !f.Down)
-            State = CharacterState.Idle;
-
-        // 5) jump
-        if (TryHandleJump(f)) return;
-
-        // 6) movement (forward/back)
-        if (TryHandleMovement(f)) return;
-
-        // 7) advance any active move or throw
+        HandleMovement();
+        HandleAttacks();
         AdvanceMovePhases();
-        AdvanceThrowPhases();
 
-        // 8) gravity if in air
-        if (State==CharacterState.Jumping)
-            ApplyGravity();
+        /* -------------------------------------------------------
+        * Passive run-meter refill (1 unit per physics frame)   *
+        * Only when NOT running or blocking.                   *
+        * ----------------------------------------------------- */
+        if (State != CharacterState.Running &&
+            State != CharacterState.BlockingHigh &&
+            State != CharacterState.BlockingLow &&
+            run_meter < RUN_METER_MAX)
+        {
+            run_meter += 1;          // tweak value for slower/faster recharge
+        }
     }
 
-    // ─── Input Handling ─────────────────────────────────────────────
-    bool TryHandleAttacks(InputBuffer.Frame f)
+    // ───────────────────────────────────────── Movement & stance
+    void HandleMovement()
+{
+    var  i       = InputBuf.State;
+    int  dirSign = _facingRight ? 1 : -1;   // +1 if facing right, -1 if facing left
+    float xDir   = 0f;
+
+    /* ---------------------------------------------------------
+     * 0) CROUCH (always processed first)
+     * --------------------------------------------------------- */
+    bool crouchBtn = i.Down && State != CharacterState.Jumping && State != CharacterState.HitStun;
+
+    /* ---------------------------------------------------------
+     * 1) Determine if guard-button is pressed
+     * --------------------------------------------------------- */
+    bool wantsBlock   = i.Block;
+    bool inBlockStun  = block_cnt > 0;          // still frozen from last blocked hit
+    bool crushLocked  = run_crush_cnt > 0;      // run-meter guard-crush lockout
+    bool canBlockNow  = !crushLocked && !inBlockStun;
+
+    /* ---------------------------------------------------------
+     * 2) Blocking logic
+     * --------------------------------------------------------- */
+    if (wantsBlock && canBlockNow)
     {
-        // only from Idle/Walking/Crouch
-        if (State!=CharacterState.Idle
-         && State!=CharacterState.Walking
-         && State!=CharacterState.Crouch)
-            return false;
+        // choose high/low guard pose based on crouch button
+        State    = crouchBtn ? CharacterState.BlockingLow
+                             : CharacterState.BlockingHigh;
 
-        // 1) crouch + HP => Uppercut
-        if (State==CharacterState.Crouch && f.PressedHighPunch)
-        {
-            StartAttack("Uppercut");
-            return true;
-        }
-
-        // 2) ground normals
-        if (f.PressedHighPunch){ StartAttack("HighPunch");   return true;}
-        if (f.PressedHighKick) { StartAttack("HighKick");    return true;}
-        if (f.PressedLowPunch) { StartAttack("LowPunch");    return true;}
-        if (f.PressedLowKick)  { StartAttack("LowKick");     return true;}
-
-        // 3) combos
-        if (f.PressedLowPunch && f.PressedLowKick)   { StartAttack("SweepKick");    return true; }
-        if (f.PressedHighPunch&& f.PressedHighKick)  { StartAttack("Uppercut");     return true; }
-        if (f.PressedHighKick && f.PressedLowKick)   { StartAttack("Roundhouse");   return true; }
-
-        // 4) throws
-        if (f.PressedHighPunch && f.PressedHighKick) { StartThrow("Throw_Fwd");     return true; }
-        if (f.PressedLowPunch  && f.PressedLowKick)  { StartThrow("Throw_Rev");     return true; }
-
-        // 5) jump attacks
-        if (State==CharacterState.Jumping)
-        {
-            if (f.PressedHighPunch)
-            {
-                var tag = f.Up
-                        ? "JumpPunch_U"
-                        : f.Right == _facingRight
-                            ? "JumpPunch_F"
-                            : "JumpPunch_B";
-                StartAttack(tag);
-                return true;
-            }
-            if (f.PressedHighKick)
-            {
-                var tag = f.Up
-                        ? "JumpKick_U"
-                        : f.Right == _facingRight
-                            ? "JumpKick_F"
-                            : "JumpKick_B";
-                StartAttack(tag);
-                return true;
-            }
-        }
-
-        // 6) back-dash
-        if (InputBuf.DoubleTappedBack(_facingRight))
-        {
-            StartAttack("BackDash");
-            return true;
-        }
-
-        // 7) wake-roll (crouch + LK)
-        if (State==CharacterState.Crouch && f.PressedLowKick)
-        {
-            StartAttack("WakeupRoll");
-            return true;
-        }
-
-        return false;
+        Velocity = Vector3.zero;               // stop every frame you guard
+        run_meter = Mathf.Max(0, run_meter - RUN_DRAIN_PER_FRAME);
+        return;                                // no walk/run while guarding
     }
-
-    bool TryHandleJump(InputBuffer.Frame f)
+    else if ((State == CharacterState.BlockingHigh || State == CharacterState.BlockingLow)
+             && !wantsBlock && !inBlockStun)
     {
-        if (State==CharacterState.Idle && IsGrounded && f.Up)
-        {
-            if (!_moveTable.TryGet("JumpStart", out var m)) return false;
-            State        = CharacterState.Jumping;
-            Phase        = MovePhase.Startup;
-            _currentMove = m;
-            _frameLeft   = m.startUp;
-            Velocity     = new Vector3(0, jumpVelocity, 0);
-            IsGrounded   = false;
-            return true;
-        }
-        return false;
+        // button released and stun over → revert to idle/crouch
+        State = crouchBtn ? CharacterState.Crouch : CharacterState.Idle;
     }
-
-    bool TryHandleMovement(InputBuffer.Frame f)
+    else if (inBlockStun)
     {
-        int dir = f.Left ? -1 : f.Right ? 1 : 0;
-        if ((State==CharacterState.Idle
-          || State==CharacterState.Walking
-          || State==CharacterState.Running
-          || State==CharacterState.Crouch)
-          && IsGrounded)
-        {
-            if (dir != 0)
-            {
-                // facing stays fixed; no automatic flip
-                if (f.Run && dir == (_facingRight ? 1 : -1))
-                {
-                    State    = CharacterState.Running;
-                    Velocity = new Vector3(dir * runSpeed, 0, 0);
-                }
-                else
-                {
-                    State    = CharacterState.Walking;
-                    Velocity = new Vector3(dir * walkSpeed, 0, 0);
-                }
-                return true;
-            }
-            else if (State==CharacterState.Walking
-                  || State==CharacterState.Running)
-            {
-                State    = CharacterState.Idle;
-                Velocity = Vector3.zero;
-                return true;
-            }
-        }
-        return false;
+        // still frozen by block-stun counter
+        Velocity = Vector3.zero;
+        return;
     }
 
-    // ─── Phase Advancement ─────────────────────────────────────────
-    void AdvanceMovePhases()
+    /* ---------------------------------------------------------
+     * 3) If crouching (but not blocking), freeze X movement
+     * --------------------------------------------------------- */
+    if (crouchBtn)
     {
-        if (State==CharacterState.Attacking
-         || State==CharacterState.BackDash
-         || State==CharacterState.WakeRoll)
-        {
-            _frameLeft--;
-            if (_frameLeft <= 0)
-            {
-                switch (Phase)
-                {
-                    case MovePhase.Startup:
-                        Phase      = _currentMove.active > 0
-                                     ? MovePhase.Active
-                                     : MovePhase.Recovery;
-                        _frameLeft = Phase==MovePhase.Active
-                                   ? _currentMove.active
-                                   : _currentMove.recovery;
-                        break;
-                    case MovePhase.Active:
-                        Phase      = MovePhase.Recovery;
-                        _frameLeft = _currentMove.recovery;
-                        break;
-                    case MovePhase.Recovery:
-                        State      = CharacterState.Idle;
-                        Velocity   = Vector3.zero;
-                        break;
-                }
-            }
-        }
+        State    = CharacterState.Crouch;
+        Velocity = new Vector3(0f, Velocity.y, 0f);
+        return;                                // no walk/run while crouched
     }
-
-    void AdvanceThrowPhases()
+    else if (State == CharacterState.Crouch)
     {
-        if (State==CharacterState.ThrowStartup)
-        {
-            _frameLeft--;
-            if (_frameLeft <= 0)
-            {
-                State      = CharacterState.Throwing;
-                _frameLeft = _currentThrow.execute;
-            }
-        }
-        else if (State==CharacterState.Throwing)
-        {
-            _frameLeft--;
-            if (_frameLeft <= 0)
-            {
-                State      = CharacterState.Recovery;
-                _frameLeft = _currentThrow.recovery;
-            }
-        }
+        State = CharacterState.Idle;           // Down released
     }
 
-    void ApplyGravity()
+    /* ---------------------------------------------------------
+     * 4) RUN  (requires run button + forward + meter)
+     * --------------------------------------------------------- */
+    if (i.Run && i.Forward && run_meter > 0)
     {
-        Velocity += Vector3.down * gravity * Time.fixedDeltaTime;
-        if (Velocity.y <= 0 && IsGrounded)
+        State       = CharacterState.Running;
+        xDir        = dirSign * RUN_SPEED;
+        run_meter   = Mathf.Max(0, run_meter - 1);
+    }
+    else if (State == CharacterState.Running)
+    {
+        State = CharacterState.Idle;
+        if (run_meter == 0) run_crush_cnt = RUN_CRUSH_FRAMES;
+    }
+
+    /* ---------------------------------------------------------
+     * 5) WALK
+     * --------------------------------------------------------- */
+    if (State == CharacterState.Idle || State == CharacterState.Walking)
+    {
+        if (i.Forward)
         {
-            if (_moveTable.TryGet("JumpLand", out var land))
-            {
-                State        = CharacterState.Recovery;
-                Phase        = MovePhase.Startup;
-                _currentMove = land;
-                _frameLeft   = land.startUp;
-                Velocity     = Vector3.zero;
-                IsGrounded   = true;
-            }
+            xDir  = dirSign * WALK_SPEED;
+            State = CharacterState.Walking;
+        }
+        else if (i.Back)
+        {
+            xDir  = -dirSign * WALK_SPEED;
+            State = CharacterState.Walking;
+        }
+        else if (State == CharacterState.Walking)
+        {
+            State = CharacterState.Idle;
         }
     }
 
-    // ─── Attack / Throw Helpers ────────────────────────────────────
+    Velocity = new Vector3(xDir, Velocity.y, 0f);
+
+    /* ---------------------------------------------------------
+     * 6) JUMP  (from Idle / Walk / Run)
+     * --------------------------------------------------------- */
+    if (i.PressedUp && (State == CharacterState.Idle ||
+                        State == CharacterState.Walking ||
+                        State == CharacterState.Running))
+    {
+        float jx = 0f;
+        if (i.Forward) jx =  dirSign * JUMP_VX;
+        if (i.Back)    jx = -dirSign * JUMP_VX;
+
+        Velocity = new Vector3(jx, JUMP_VY, 0f);
+        State    = CharacterState.Jumping;
+    }
+}
+
+
+
+    // ───────────────────────────────────────── Attacks
+    void HandleAttacks()
+    {
+        if (State != CharacterState.Idle &&
+            State != CharacterState.Walking &&
+            State != CharacterState.Running &&
+            State != CharacterState.Crouch) return;
+
+        var i = InputBuf.State;
+
+        if      (i.PressedHighPunch) StartAttack("HighPunch");
+        else if (i.PressedHighKick)  StartAttack("HighKick");
+        else if (i.PressedLowPunch)  StartAttack("LowPunch");
+        else if (i.PressedLowKick)   StartAttack("LowKick");
+        else if (InputBuf.DoubleTappedBack()) StartBackDash();
+    }
+
     void StartAttack(string tag)
     {
-        Debug.Log($"[Core] StartAttack called with tag='{tag}'");
-        if (!_moveTable.TryGet(tag, out var m))
+        if (!moveTable.TryGet(tag, out _currentMove)) return;
+
+        State        = CharacterState.Attacking;
+        Phase        = MovePhase.Startup;
+        _phaseFrames = _currentMove.startUp;
+    }
+
+    void StartBackDash()
+    {
+        if (!moveTable.TryGet("BackDash", out _currentMove)) return;
+
+        State        = CharacterState.BackDash;
+        Phase        = MovePhase.Startup;
+        _phaseFrames = _currentMove.startUp;
+        Velocity     = new Vector3(_facingRight ? -5f : 5f, 0f, 0f);
+    }
+
+    // ───────────────────────────────────────── Phases
+    void AdvanceMovePhases()
+    {
+        if (State != CharacterState.Attacking && State != CharacterState.BackDash) return;
+        if (--_phaseFrames > 0) return;
+
+        switch (Phase)
         {
-            Debug.LogWarning($"[Core] MoveTable has no '{tag}'");
-            return;
+            case MovePhase.Startup:
+                Phase        = MovePhase.Active;
+                _phaseFrames = _currentMove.active;
+                break;
+
+            case MovePhase.Active:
+                Phase        = MovePhase.Recovery;
+                _phaseFrames = _currentMove.recovery;
+                break;
+
+            case MovePhase.Recovery:
+                State = CharacterState.Idle;
+                Phase = MovePhase.Startup;
+                break;
         }
-        Velocity      = Vector3.zero;      // lock movement
-        State         = CharacterState.Attacking;
-        Phase         = MovePhase.Startup;
-        _currentMove  = m;
-        _frameLeft    = m.startUp;
     }
 
-    void StartThrow(string tag)
+    // ───────────────────────────────────────── Reactions (hit / block)
+    public void ReceiveHit(MoveFrameData mv, bool blocked, FighterCharacterCore attacker)
     {
-        if (!_throwTable.TryGet(tag, out var t)) return;
-        State         = CharacterState.ThrowStartup;
-        Phase         = MovePhase.Startup;
-        _currentThrow = t;
-        _frameLeft    = t.startUp;
-        escapeWindow  = t.escapeWindow;
+        /* UNBLOCKABLE strikes ignore guard */
+        bool unblockable = mv.unblockable;
+        if (blocked && !unblockable)
+            ResolveBlock(mv);
+        else
+            ResolveHit(mv);
     }
 
-    // ─── Hit Reaction ───────────────────────────────────────────────
-    public void ReceiveHit(MoveFrameData move, bool blocked, FighterCharacterCore attacker)
+    void ResolveBlock(MoveFrameData mv)
     {
-        Health -= blocked ? 0 : move.damage;
-        if (_reactionTable.TryGet(move.reaction, out var r))
+        /* chip damage */
+        bool noChip = mv.noChip;
+        if (!noChip) Health -= mv.damage / 4;
+
+        /* start/block counter */
+        block_cnt = block_len_tbl[(int)mv.power];
+
+        /* push-back */
+        int push = push_dist_tbl[(int)mv.power];
+        Velocity = new Vector3(_facingRight ? -push : push, 0f, 0f);
+
+        /* freeze in high/low state depending on stance */
+        State = (State == CharacterState.Crouch) ? CharacterState.BlockingLow
+                                                 : CharacterState.BlockingHigh;
+    }
+
+    void ResolveHit(MoveFrameData mv)
+    {
+        Health -= mv.damage;
+
+        if (reactionTable.TryGet(mv.reaction, out var r))
+            hitStun = r.hitStun;
+
+        if (mv.knockDown)
         {
-            blockStun = blocked ? r.blockStun : 0;
-            hitStun   = blocked ? 0         : r.hitStun;
-            airStun   = (!blocked && move.knockDown) ? r.airStun : 0;
+            State      = CharacterState.Knockdown;
+            knockTimer = 16;   // fixed for now; could use r.knockdownDelay
         }
-        State     = CharacterState.HitStun;
-        Phase     = MovePhase.Startup;
-        _frameLeft = blocked ? r.blockStun : r.hitStun;
+        else
+            State = CharacterState.HitStun;
     }
 
-    public void SetState(CharacterState st)
-    {
-        State    = st;
-        Phase    = MovePhase.Startup;
-        _frameLeft = 0;
-        Velocity = Vector3.zero;
-    }
+    public void SetState(CharacterState s) => State = s;
 }

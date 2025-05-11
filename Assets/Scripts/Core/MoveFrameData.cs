@@ -10,17 +10,36 @@ public enum ReactionType
     Knockback
 }
 
+/// <summary>
+/// Frame data for one normal / special / throw.
+/// Stored inside a larger MoveTableSO as before.
+/// </summary>
 [System.Serializable]
 public struct MoveFrameData
 {
-    public string      tag;          // e.g. "HighPunch", "SweepKick"
-    public int         startUp;      // frames before first active
-    public int         active;       // number of active frames
-    public int         recovery;     // frames after last active
-    public int         damage;       // pixel damage or %×10
-    public ReactionType reaction;    // how victim reacts
-    public float       pushX;        // horizontal velocity applied
-    public float       pushY;        // vertical velocity applied
-    public bool        knockDown;    // does it sweep/knockdown?
-    public bool        unblockable;  // cannot be blocked?
+    public string       tag;           // "HighPunch", "SweepKick", …
+    public int          startUp;       // frames before hit can connect
+    public int          active;        // active frames
+    public int          recovery;      // post-swing frames
+    public int          damage;        // life to subtract (or 10×%)
+    public ReactionType reaction;      // victim reaction type
+    public float        pushX;         // horizontal knock-back
+    public float        pushY;         // vertical knock-back
+    public bool         knockDown;     // true = sweeps / KD
+    public bool         unblockable;   // true = ignores guard
+
+    // ── Added for PSX-style block system ─────────────────────
+    public bool         noChip;        // true = does 0 chip on block
+    public AttackPower  power;         // Light / Medium / Heavy / Special
 }
+
+/// <summary>
+/// Same four levels the PSX tables use; indices 0-3.
+/// </summary>
+/*public enum AttackPower
+{
+    Light   = 0,
+    Medium  = 1,
+    Heavy   = 2,
+    Special = 3
+}*/
