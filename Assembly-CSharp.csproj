@@ -55,6 +55,7 @@
     <Compile Include="Assets\Scripts\Core\Gender.cs" />
     <Compile Include="Assets\Scripts\Core\PlayerControlsProfile.cs" />
     <Compile Include="Assets\Scripts\Core\GameEvent.cs" />
+    <Compile Include="Assets\Scripts\Runtime\NoStandOnOpponent.cs" />
     <Compile Include="Assets\Scripts\Core\ReactionFrameData.cs" />
     <Compile Include="Assets\Scripts\Core\FighterCharacterCore.cs" />
     <Compile Include="Assets\Scripts\Runtime\UMK3CameraController.cs" />
@@ -67,10 +68,12 @@
     <Compile Include="Assets\Scripts\Runtime\RoundSystem.cs" />
     <Compile Include="Assets\Scripts\Core\ThrowData.cs" />
     <Compile Include="Assets\Scripts\Core\ReactionTableSO.cs" />
+    <Compile Include="Assets\RunMeterController.cs" />
     <Compile Include="Assets\Scripts\Runtime\AudioRoundManager.cs" />
     <Compile Include="Assets\Scripts\Core\CombatAudioBank.cs" />
+    <Compile Include="Assets\Scripts\Tools\HitboxEditor\ColliderPlayer2D.cs" />
     <Compile Include="Assets\Scripts\Debug\HitboxDebugger.cs" />
-    <Compile Include="Assets\Scripts\Runtime\FighterBoundaryLimiter.cs" />
+    <Compile Include="Assets\Scripts\Tools\HitboxEditor\ColliderClip2D.cs" />
     <Compile Include="Assets\Scripts\Core\MoveFrameData.cs" />
     <Compile Include="Assets\Scripts\Runtime\HitboxDamage.cs" />
     <Compile Include="Assets\Scripts\Debug\StageBounds.cs" />

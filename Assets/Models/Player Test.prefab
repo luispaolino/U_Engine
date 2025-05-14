@@ -62,7 +62,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -140,7 +140,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -305,15 +305,9 @@ GameObject:
   m_Component:
   - component: {fileID: 5370244674758012526}
   - component: {fileID: 3415798968149241331}
-  - component: {fileID: 2060544644157275067}
-  - component: {fileID: 7246513217652760853}
   - component: {fileID: 2333114475176516308}
-  - component: {fileID: 7380509801225397936}
-  - component: {fileID: 6553045591418126184}
-  - component: {fileID: 1937125258368101172}
-  - component: {fileID: 2273946128028129274}
   m_Layer: 6
-  m_Name: Player
+  m_Name: Player Test
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -346,7 +340,7 @@ Animator:
   m_GameObject: {fileID: 3356299731892799353}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: 8595e0a7f8893ba46acdf8019eb5a8bf, type: 3}
-  m_Controller: {fileID: 9100000, guid: 023d1b6f3382c6041a542deec92fc6eb, type: 2}
+  m_Controller: {fileID: 9100000, guid: ef46d2e4fc0325b428686b168366212c, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -358,79 +352,6 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!50 &2060544644157275067
-Rigidbody2D:
-  serializedVersion: 5
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3356299731892799353}
-  m_BodyType: 0
-  m_Simulated: 1
-  m_UseFullKinematicContacts: 0
-  m_UseAutoMass: 0
-  m_Mass: 1
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
-  m_GravityScale: 5
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_Interpolate: 0
-  m_SleepingMode: 1
-  m_CollisionDetection: 1
-  m_Constraints: 4
---- !u!61 &7246513217652760853
-BoxCollider2D:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3356299731892799353}
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Density: 1
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ForceSendLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ForceReceiveLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ContactCaptureLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_CallbackLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_IsTrigger: 1
-  m_UsedByEffector: 0
-  m_CompositeOperation: 0
-  m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0.9}
-  m_SpriteTilingProperty:
-    border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0, y: 0}
-    oldSize: {x: 0, y: 0}
-    newSize: {x: 0, y: 0}
-    adaptiveTilingThreshold: 0
-    drawMode: 0
-    adaptiveTiling: 0
-  m_AutoTiling: 0
-  m_Size: {x: 0.5, y: 1.77}
-  m_EdgeRadius: 0
 --- !u!82 &2333114475176516308
 AudioSource:
   m_ObjectHideFlags: 0
@@ -528,69 +449,6 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
---- !u!114 &7380509801225397936
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3356299731892799353}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cd0b17275e6e7584e9b386062807c0b2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FighterCharacter
-  moveTable: {fileID: 11400000, guid: 4a69ec5327b31eb49b5a44721eee4df1, type: 2}
-  reactionTable: {fileID: 11400000, guid: 065a04a6b371e04409085f3f7389d1c7, type: 2}
-  throwTable: {fileID: 11400000, guid: e2492a7aca7a8bd40b47394e0718f8b6, type: 2}
-  combatBank: {fileID: 0}
-  controlsProfile: {fileID: 11400000, guid: f3ed2e772b01e3c4b970091c4d8f8038, type: 2}
-  graphics: {fileID: 8329509656570452832}
-  startFacingRight: 1
-  gender: 0
-  groundY: 0
-  jumpUpVelocity: 7
-  jumpForwardVelocity: 6
-  jumpBackVelocity: 6
---- !u!114 &6553045591418126184
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3356299731892799353}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 61c9f39cd067d0d4aaed3a8d0b891b5a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FighterPresenter
-  hurtbox: {fileID: 7093765477751306109}
-  projectileShield: {fileID: 1786815509959636469}
---- !u!114 &1937125258368101172
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3356299731892799353}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e44627c5c4de11b479d7e421acfba7fd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::InputBuffer
-  profile: {fileID: 11400000, guid: f3ed2e772b01e3c4b970091c4d8f8038, type: 2}
---- !u!114 &2273946128028129274
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3356299731892799353}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c7828c542e9267d4c9147343d3be2b76, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FighterBoundaryLimiter
 --- !u!1 &3576307011545724865
 GameObject:
   m_ObjectHideFlags: 0
@@ -894,7 +752,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -972,7 +830,7 @@ BoxCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0

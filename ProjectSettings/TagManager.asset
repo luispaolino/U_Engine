@@ -11,12 +11,12 @@ TagManager:
   - 
   - Water
   - UI
-  - Fighter
+  - FighterPush
   - Hitbox
   - Hurtbox
   - Ground
   - feet
-  - 
+  - StageWall
   - 
   - 
   - 

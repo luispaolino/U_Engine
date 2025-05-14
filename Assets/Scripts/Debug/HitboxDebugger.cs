@@ -168,7 +168,8 @@ public class HitboxDebugger : MonoBehaviour
     {
         int hurtL = LayerMask.NameToLayer("Hurtbox");
         int hitL  = LayerMask.NameToLayer("Hitbox");
-        int figL  = LayerMask.NameToLayer("Fighter");
+        int figL  = LayerMask.NameToLayer("FighterPush");
+        int stgL  = LayerMask.NameToLayer("StageWall");
 
         var all = FindObjectsOfType<Collider2D>();
         hurtboxTargets = all.Where(c => c.gameObject.layer == hurtL).ToArray();
