@@ -4,8 +4,14 @@ using UnityEngine;
 public class PlayerControlsProfile : ScriptableObject
 {
     [Header("Axes (for joystick/D-pad)")]
-    public string HorizontalAxis;
-    public string VerticalAxis;
+    public string horizontalAxis = "Horizontal";
+    public string verticalAxis = "Vertical";
+
+     [Header("Optional dedicated Up key (leave None to rely purely on axis)")]
+    public KeyCode leftKey   = KeyCode.None;
+    public KeyCode rightKey  = KeyCode.None;
+    public KeyCode upKey     = KeyCode.None;
+    public KeyCode downKey   = KeyCode.None;
 
     [Header("Buttons")]
     public KeyCode runKey;

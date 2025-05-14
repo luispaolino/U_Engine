@@ -12,8 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 549a820dbaefbf143a57ec3e36ea693a, type: 3}
   m_Name: P1ControlsProfile
   m_EditorClassIdentifier: Assembly-CSharp::PlayerControlsProfile
-  HorizontalAxis: Horizontal
-  VerticalAxis: Vertical
+  horizontalAxis: Horizontal_P1
+  verticalAxis: Vertical_P1
+  leftKey: 276
+  rightKey: 275
+  upKey: 273
+  downKey: 274
   runKey: 111
   blockKey: 108
   highPunchKey: 105

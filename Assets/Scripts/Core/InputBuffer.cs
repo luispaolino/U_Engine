@@ -3,75 +3,107 @@
 [DisallowMultipleComponent]
 public class InputBuffer : MonoBehaviour
 {
+    /* ───────────────────────────── Inspector ───────────────────────── */
     [Header("Control Profile")]
-    public PlayerControlsProfile profile;
+    public PlayerControlsProfile profile;    // must be unique per fighter
 
-    // Snapshot of one frame’s inputs (world + local)
+    /* ───────────────────────────── Frame Snapshot ───────────────────── */
     public struct Frame
     {
-        // world-relative
+        /* world-relative directions */
         public bool Left, Right, Up, Down;
 
-        // local (toward / away)
+        /* local directions (toward / away) */
         public bool Forward, Back;
 
-        // held buttons
+        /* held buttons */
         public bool Run, Block;
 
-        // edge triggers this frame
+        /* per-frame edge triggers */
         public bool PressedHighPunch, PressedHighKick;
         public bool PressedLowPunch,  PressedLowKick;
-        public bool PressedBlock,     PressedRun,     PressedUp;
+        public bool PressedBlock,     PressedRun;
+        public bool PressedUp;
         public bool PressedForward,   PressedBack;
     }
 
     public Frame State { get; private set; }
-    Frame _prev;                         // previous frame for edge detection
+    Frame _prev;                    // previous-frame snapshot for edge tests
 
-    // double-tap back detection
+    /* double-tap back detection */
     float _lastBackTapTime;
     bool  _waitingSecondTap;
 
+    /* ───────────────────────────── API ─────────────────────────────── */
+
+    /// <summary>Erase the previous-frame snapshot (used at round reset).</summary>
+    public void ClearPrev() => _prev = default;
+
     /// <summary>
-    /// Sample current hardware input. Must be called once per Update before gameplay logic.
-    /// Provide the fighter’s current facing (true = facing right).
+    /// Capture hardware input. Call exactly once per *Update*.
     /// </summary>
+    /// <param name="facingRight">Current facing; true = right.</param>
     public void Capture(bool facingRight)
     {
         Frame f = new Frame();
 
-        // 1) raw axis
-        float h = Input.GetAxisRaw(profile.HorizontalAxis);
-        float v = Input.GetAxisRaw(profile.VerticalAxis);
+        /* 1 ─ raw axes (profile supplies axis names) */
+        float h = 0f, v = 0f;
 
+        if (!string.IsNullOrEmpty(profile.horizontalAxis))
+            h = Input.GetAxisRaw(profile.horizontalAxis);
+
+        if (!string.IsNullOrEmpty(profile.verticalAxis))
+            v = Input.GetAxisRaw(profile.verticalAxis);
+
+        /* fallback to dedicated keys if axis is idle */
+        if (Mathf.Approximately(h, 0f))
+        {
+            if (profile.leftKey  != KeyCode.None && Input.GetKey(profile.leftKey))
+                h = -1f;
+            if (profile.rightKey != KeyCode.None && Input.GetKey(profile.rightKey))
+                h =  1f;
+        }
+        if (Mathf.Approximately(v, 0f))
+        {
+            if (profile.upKey   != KeyCode.None && Input.GetKey(profile.upKey))
+                v =  1f;
+            if (profile.downKey != KeyCode.None && Input.GetKey(profile.downKey))
+                v = -1f;
+        }
+
+        /* 2 ─ world-direction booleans */
         f.Left  = h < 0f;
         f.Right = h > 0f;
         f.Down  = v < 0f;
         f.Up    = v > 0f;
 
-        // 2) local mapping
+        /* 3 ─ local directions (relative to facing) */
         f.Forward =  facingRight ? f.Right : f.Left;
         f.Back    =  facingRight ? f.Left  : f.Right;
 
-        // 3) held buttons
+        /* 4 ─ held buttons */
         f.Run   = Input.GetKey(profile.runKey);
         f.Block = Input.GetKey(profile.blockKey);
 
-        // 4) edge (Down events)
+        /* 5 ─ edge triggers (KeyDown OR axis edge) */
         f.PressedHighPunch = Input.GetKeyDown(profile.highPunchKey);
         f.PressedHighKick  = Input.GetKeyDown(profile.highKickKey);
         f.PressedLowPunch  = Input.GetKeyDown(profile.lowPunchKey);
         f.PressedLowKick   = Input.GetKeyDown(profile.lowKickKey);
         f.PressedBlock     = Input.GetKeyDown(profile.blockKey);
         f.PressedRun       = Input.GetKeyDown(profile.runKey);
-        f.PressedUp        = Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W);
+
+        bool upKeyDown = profile.upKey != KeyCode.None &&
+                         Input.GetKeyDown(profile.upKey);
+        f.PressedUp    = upKeyDown || (f.Up && !_prev.Up);
 
         f.PressedForward = f.Forward && !_prev.Forward;
         f.PressedBack    = f.Back    && !_prev.Back;
 
-        // store
-        _prev  = f;
-        State  = f;
+        /* 6 ─ commit snapshot */
+        _prev = f;
+        State = f;
     }
 
     /// <summary>True if BACK tapped twice within 0.25 s (local back).</summary>
