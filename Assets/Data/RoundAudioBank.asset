@@ -36,34 +36,34 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 4cf7317c3328f6c48915bfd50079a24a, type: 3}
     volume: 1
   - evt: 5
-    resourcesPath: Arcade/UI/mk3-09005
-    clip: {fileID: 8300000, guid: 602d1c24fec69d84da4ad185dad7f1c3, type: 3}
+    resourcesPath: Arcade/UI/mk3-01030
+    clip: {fileID: 8300000, guid: cba885247b8f9c2439694c81fa31c913, type: 3}
     volume: 1
   - evt: 6
-    resourcesPath: Arcade/ShaoKahn/mk3-09015
-    clip: {fileID: 8300000, guid: 6f63403fbb2b6b443a80a1c4543d474a, type: 3}
+    resourcesPath: Arcade/ShaoKahn/mk3-09000
+    clip: {fileID: 8300000, guid: 5355c362828fa804cb924d49944005d0, type: 3}
     volume: 1
   - evt: 7
-    resourcesPath: Arcade/ShaoKahn/mk3-09145
-    clip: {fileID: 8300000, guid: f6bea4a53e6430d47a724766bbd922b4, type: 3}
+    resourcesPath: Arcade/ShaoKahn/mk3-09005
+    clip: {fileID: 8300000, guid: 602d1c24fec69d84da4ad185dad7f1c3, type: 3}
     volume: 1
   - evt: 9
-    resourcesPath: Arcade/UI/mk3-01060
-    clip: {fileID: 8300000, guid: 4cf7317c3328f6c48915bfd50079a24a, type: 3}
+    resourcesPath: Arcade/UI/mk3-09015
+    clip: {fileID: 8300000, guid: 6f63403fbb2b6b443a80a1c4543d474a, type: 3}
     volume: 1
   - evt: 10
     resourcesPath: Arcade/ShaoKahn/mk3-09145
     clip: {fileID: 8300000, guid: f6bea4a53e6430d47a724766bbd922b4, type: 3}
     volume: 1
   - evt: 11
-    resourcesPath: Arcade/Names/mk3-21120
-    clip: {fileID: 8300000, guid: 55c384792d6c3de4d897dfcd8eec5417, type: 3}
+    resourcesPath: Arcade/ShaoKahn/mk3-09165
+    clip: {fileID: 8300000, guid: 8c9fd440d0801804f8672008cd8f63c4, type: 3}
     volume: 1
   - evt: 8
     resourcesPath: Arcade/Names/mk3-01060
     clip: {fileID: 8300000, guid: 4cf7317c3328f6c48915bfd50079a24a, type: 3}
     volume: 1
-  - evt: 8
-    resourcesPath: Arcade/Names/mk3-09430
-    clip: {fileID: 8300000, guid: bfc212443a606e9459f8d18f9d0131f6, type: 3}
+  - evt: 12
+    resourcesPath: Arcade/Names/mk3-21120
+    clip: {fileID: 8300000, guid: 55c384792d6c3de4d897dfcd8eec5417, type: 3}
     volume: 1

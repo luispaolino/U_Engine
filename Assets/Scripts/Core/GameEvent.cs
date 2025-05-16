@@ -16,7 +16,6 @@ public enum GameEvent
     Flawless,
     FlawlessVictory,
     Wins,
-
-    // Name call-outs (extend as you add characters)
+    Mercy,
     Name_Scorpion
 }

@@ -66,5 +66,7 @@
     "explorer.fileNesting.patterns": {
         "*.sln": "*.csproj",
     },
-    "dotnet.defaultSolution": "U_Engine.sln"
+    "dotnet.defaultSolution": "U_Engine.sln",
+    "debug.javascript.codelens.npmScripts": "top",
+    "editor.codeLens": false
 }

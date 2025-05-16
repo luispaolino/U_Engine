@@ -20,8 +20,8 @@ public static class DefaultUMK3DataGenerator
     static void CreateMoveTable()
     {
         var path = "Assets/Data/BasicMoves.asset";
-        var asset = AssetDatabase.LoadAssetAtPath<MoveTableSO>(path) ??
-                    ScriptableObject.CreateInstance<MoveTableSO>();
+        var asset = AssetDatabase.LoadAssetAtPath<BasicMovesSO>(path) ??
+                    ScriptableObject.CreateInstance<BasicMovesSO>();
 
         asset.moves = new MoveFrameData[]
         {

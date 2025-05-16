@@ -12,4 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eab980791959a564893d107917f84d87, type: 3}
   m_Name: BasicMoves
   m_EditorClassIdentifier: Assembly-CSharp::MoveTableSO
-  moves: []
+  moves:
+  - tag: 
+    startUp: 0
+    active: 0
+    recovery: 0
+    damage: 0
+    reaction: 0
+    pushX: 0
+    pushY: 0
+    knockDown: 0
+    unblockable: 0
+    canMoveDuringStartUp: 0
+    canMoveDuringActive: 0
+    noChip: 0
+    power: 0

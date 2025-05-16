@@ -1,30 +1,39 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
-using UMK3; // Your project's namespace
+using System.Linq;
+using UMK3;
 
 public class RoundSystem : MonoBehaviour
 {
     /* ───────────────────────────── Inspector Fields ─────────────────────────── */
-    [Header("Fighters")]
-    public FighterCharacter fighterA;
-    public FighterCharacter fighterB;
+    [Header("Player Setup")]
+    public GameObject player1Prefab;
+    public GameObject player2Prefab;
+    public Transform player1SpawnPoint;
+    public Transform player2SpawnPoint;
+    public PlayerControlsProfile player1Controls;
+    public PlayerControlsProfile player2Controls;
+    [Tooltip("Additional Y-axis rotation offset for Player 1's GRAPHICS when spawned.")]
+    public float player1YRotationOffset = 0f;
+    [Tooltip("Additional Y-axis rotation offset for Player 2's GRAPHICS when spawned.")]
+    public float player2YRotationOffset = 0f;
 
-    [Header("UI")]
+    [Header("System References")]
+    public CameraController mainGameCamera;
+
+    [Header("UI (Excluding OnGUI elements)")]
     public Text centerMessage;
     public Text timerText;
-    public Text meterTextA; // UI Text for Player A's Meter Percentage
-    public Text meterTextB; // UI Text for Player B's Meter Percentage
-    // Add separate Text fields for win counts if needed:
-    // public Text winCountTextA;
-    // public Text winCountTextB;
 
     [Header("Round & Timer")]
     public int timeLimit = 90;
     public int roundsToWin = 2;
     public float introFreeze = 1.2f;
     public float fightFlash = 0.8f;
-    public float koFreeze = 0.4f;
+    public float koFreeze = 0.4f; // Base pause after normal KO or finisher timeout
+    public const float FINISHER_TIMER_DURATION = 7.0f;
+    private const float MERCY_OUTCOME_WAIT_SEC = 0.5f; // Pause after mercy related messages
 
     [Header("Distance Clamping")]
     public float maxCharacterXDistance = 5.82f;
@@ -33,413 +42,251 @@ public class RoundSystem : MonoBehaviour
     public float fadeDuration = 0.5f;
     public float gameOverFadeDuration = 0.8f;
 
-    /* ───────────────────────────── Runtime Variables ───────────────────────────── */
-    private int roundTimer;
+    /* ───────────────────────────── Runtime References & State ───────────────────────────── */
+    private FighterCharacter fighterA_instance;
+    private FighterCharacter fighterB_instance;
+    public FighterCharacter Player1 => fighterA_instance;
+    public FighterCharacter Player2 => fighterB_instance;
+
+    private int roundTimerSec;
     private int winsA, winsB;
     private bool roundActive;
-    private bool lowHealthPlayed;
-
-    private readonly Vector2 spawnA = new Vector2(-2f, 0f);
-    private readonly Vector2 spawnB = new Vector2(2f, 0f);
+    private bool lowHealthWarningPlayedP1;
+    private bool lowHealthWarningPlayedP2;
+    private const float LOW_HEALTH_THRESHOLD_PERCENT = 0.10f;
 
     private Rigidbody2D rbA;
     private Rigidbody2D rbB;
-
     private Vector2 prevP1Pos;
     private Vector2 prevP2Pos;
     private bool firstFrameAfterUnpause = true;
 
-    /* ───────────────────────────── Unity Lifecycle Methods ───────────────────── */
-    void Start()
+    private enum RoundEndType { None, KO, DoubleKO, TimeUpWin, TimeUpDraw }
+    private FighterCharacter currentRoundVictor = null;
+    private FighterCharacter currentRoundDefeated = null;
+    private RoundEndType currentRoundEndCondition = RoundEndType.None;
+    private bool matchAnimalityEnabled = false;
+    private int currentMatchRoundNumber = 0;
+
+    private enum PostKOSubState { None, AwaitingFinisherInput, FinisherPerformed, MercyGranted, ProceedToRoundEnd }
+    private PostKOSubState postKOState = PostKOSubState.None;
+
+    private const int LIFE_BAR_WIDTH_PX = 250;
+    private const int LIFE_BAR_HEIGHT_PX = 25;
+    private const float LIFE_BAR_Y_POS = 10f;
+    private const float LIFE_BAR_P1_X_POS = 10f;
+
+    void Awake()
     {
-        if (fighterA == null || fighterB == null)
-        {
-            Debug.LogError("RoundSystem: FighterA or FighterB not assigned. Disabling script.", this);
-            enabled = false;
-            return;
-        }
-
-        rbA = fighterA.GetComponent<Rigidbody2D>();
-        rbB = fighterB.GetComponent<Rigidbody2D>();
-
-        if (rbA == null || rbB == null)
-        {
-            Debug.LogError("RoundSystem: One or both fighters are missing Rigidbody2D components. Clamping requires them. Disabling script.", this);
-            enabled = false;
-            return;
-        }
-
-        if (FadeController.I != null)
-        {
-            FadeController.I.fadeMaterial.SetFloat("_Intensity", 1f);
-        }
-
-        fighterA.ForcePaused(true);
-        fighterB.ForcePaused(true);
-        roundActive = false;
-        firstFrameAfterUnpause = true;
-
-        if (rbA != null) prevP1Pos = rbA.position; // Initialize based on actual start
-        if (rbB != null) prevP2Pos = rbB.position;
-
-        UpdateWinCountUI();
-        ClearMeterUI();
-
-        StartCoroutine(MatchLoop());
+        if (!ValidatePlayerSetup()) { enabled = false; return; }
+        if (mainGameCamera == null) { mainGameCamera = Camera.main?.GetComponent<CameraController>(); if (mainGameCamera == null) Debug.LogWarning("RS: CameraController not assigned/found!", this); }
+        SpawnAndSetupPlayers();
+        if (fighterA_instance != null) rbA = fighterA_instance.GetComponent<Rigidbody2D>(); else { Debug.LogError("RS: P1 instance missing RB2D after spawn!", this); enabled = false; return; }
+        if (fighterB_instance != null) rbB = fighterB_instance.GetComponent<Rigidbody2D>(); else { Debug.LogError("RS: P2 instance missing RB2D after spawn!", this); enabled = false; return; }
+        if (mainGameCamera != null) { if (fighterA_instance != null && fighterB_instance != null) { mainGameCamera.InitializePlayerTargets(fighterA_instance.transform, fighterB_instance.transform); } else { Debug.LogError("RS: Could not init camera, players null after spawn.", this); } }
+        if (FadeController.I != null) FadeController.I.fadeMaterial.SetFloat("_Intensity", 1f);
+        fighterA_instance.MatchReset(); fighterB_instance.MatchReset();
+        fighterA_instance.ForcePaused(true); fighterB_instance.ForcePaused(true);
+        roundActive = false; firstFrameAfterUnpause = true;
+        if (rbA != null) prevP1Pos = rbA.position; if (rbB != null) prevP2Pos = rbB.position;
+        UpdateWinCountUI(); StartCoroutine(MatchLoop());
     }
 
-    void Update()
+    bool ValidatePlayerSetup() { bool v = true; if (player1Prefab == null) { v = false; Debug.LogError("RS: P1 Prefab missing!"); } if (player2Prefab == null) { v = false; Debug.LogError("RS: P2 Prefab missing!"); } if (player1SpawnPoint == null) { v = false; Debug.LogError("RS: P1 Spawn missing!"); } if (player2SpawnPoint == null) { v = false; Debug.LogError("RS: P2 Spawn missing!"); } if (player1Controls == null) { v = false; Debug.LogError("RS: P1 Controls missing!"); } if (player2Controls == null) { v = false; Debug.LogError("RS: P2 Controls missing!"); } return v; }
+    void SpawnAndSetupPlayers() { Quaternion p1Rot = player1SpawnPoint.rotation; GameObject p1Obj = Instantiate(player1Prefab, player1SpawnPoint.position, p1Rot); p1Obj.name = "P1_Fighter_Inst"; fighterA_instance = p1Obj.GetComponent<FighterCharacter>(); if (fighterA_instance == null) { Debug.LogError("RS: P1 Prefab no FC script!", this); Destroy(p1Obj); return; } fighterA_instance.controlsProfile = player1Controls; fighterA_instance.InitializeCoreInput(); fighterA_instance.SetInitialVisualYRotationOffset(player1YRotationOffset); Quaternion p2Rot = player2SpawnPoint.rotation; GameObject p2Obj = Instantiate(player2Prefab, player2SpawnPoint.position, p2Rot); p2Obj.name = "P2_Fighter_Inst"; fighterB_instance = p2Obj.GetComponent<FighterCharacter>(); if (fighterB_instance == null) { Debug.LogError("RS: P2 Prefab no FC script!", this); Destroy(p2Obj); return; } fighterB_instance.controlsProfile = player2Controls; fighterB_instance.InitializeCoreInput(); fighterB_instance.SetInitialVisualYRotationOffset(player2YRotationOffset); }
+    void Update() { if (roundActive) { if (timerText != null) timerText.text = roundTimerSec.ToString("00"); CheckLowHealthWarnings(); } }
+    void FixedUpdate() { if (!roundActive || fighterA_instance?.core == null || fighterB_instance?.core == null || rbA == null || rbB == null) return; if (firstFrameAfterUnpause) { if (rbA != null) prevP1Pos = rbA.position; if (rbB != null) prevP2Pos = rbB.position; firstFrameAfterUnpause = false; } Vector2 p1CFP = rbA.position; Vector2 p2CFP = rbB.position; FaceOpponent(fighterA_instance, fighterB_instance); FaceOpponent(fighterB_instance, fighterA_instance); EnforceMaxCharacterDistance(p1CFP, p2CFP); if (rbA != null) prevP1Pos = rbA.position; if (rbB != null) prevP2Pos = rbB.position; }
+    void FaceOpponent(FighterCharacter me, FighterCharacter foe) { if (me?.core == null || foe?.core == null) return; Rigidbody2D meRB = me.GetComponent<Rigidbody2D>(); Rigidbody2D foeRB = foe.GetComponent<Rigidbody2D>(); if (meRB == null || foeRB == null) return; me.core.SetFacing(foeRB.position.x > meRB.position.x); }
+    void EnforceMaxCharacterDistance(Vector2 p1O, Vector2 p2O) { float curXDist = Mathf.Abs(p1O.x - p2O.x); float tol = 0.001f; if (curXDist > maxCharacterXDistance + tol) { Vector2 fcp1 = p1O; Vector2 fcp2 = p2O; bool p1L = p1O.x < p2O.x; if (p1L) { float p1TX = p2O.x - maxCharacterXDistance; if (fcp1.x < p1TX) fcp1.x = p1TX; float p2TX = fcp1.x + maxCharacterXDistance; if (fcp2.x > p2TX) fcp2.x = p2TX; } else { float p1TX = p2O.x + maxCharacterXDistance; if (fcp1.x > p1TX) fcp1.x = p1TX; float p2TX = fcp1.x - maxCharacterXDistance; if (fcp2.x < p2TX) fcp2.x = p2TX; } float distAHC = Mathf.Abs(fcp1.x - fcp2.x); if (Mathf.Abs(distAHC - maxCharacterXDistance) > tol) { float remOG = distAHC - maxCharacterXDistance; float corr = remOG / 2.0f; if (fcp1.x < fcp2.x) { fcp1.x += corr; fcp2.x -= corr; } else { fcp1.x -= corr; fcp2.x += corr; } } if (rbA != null && Vector2.Distance(rbA.position, fcp1) > tol) rbA.MovePosition(fcp1); if (rbB != null && Vector2.Distance(rbB.position, fcp2) > tol) rbB.MovePosition(fcp2); if (fighterA_instance?.core != null) fighterA_instance.core.SyncPosition(fcp1); if (fighterB_instance?.core != null) fighterB_instance.core.SyncPosition(fcp2); } }
+    
+    IEnumerator MatchLoop() { winsA=0; winsB=0; UpdateWinCountUI(); matchAnimalityEnabled=false; currentMatchRoundNumber=0; while(true){ currentMatchRoundNumber=0; winsA=0; winsB=0; matchAnimalityEnabled=false; if(fighterA_instance!=null)fighterA_instance.MatchReset(); if(fighterB_instance!=null)fighterB_instance.MatchReset(); for(int rdDN=1;;rdDN++){ currentMatchRoundNumber++; SnapRoundStartVisuals(); if(FadeController.I!=null)yield return FadeController.I.FadeIn(fadeDuration); PrepareRound(rdDN); yield return StartCoroutine(RoundLoop(rdDN)); if(postKOState == PostKOSubState.MercyGranted) { /* Mercy was done, round effectively restarts combat, don't increment display round num here */ rdDN--; /* Redo this round display number after mercy */ continue; /* Skip to next iteration of for loop to restart round properly */ } if(winsA>=roundsToWin||winsB>=roundsToWin)break; UpdateWinCountUI(); if(FadeController.I!=null)yield return FadeController.I.FadeOut(fadeDuration); } UpdateWinCountUI(); yield return StartCoroutine(GameOverSequence((winsA>winsB)?fighterA_instance:fighterB_instance));}}
+    void SnapRoundStartVisuals() { if(fighterA_instance!=null)fighterA_instance.RoundReset(player1SpawnPoint.position,true); if(fighterB_instance!=null)fighterB_instance.RoundReset(player2SpawnPoint.position,false); if(rbA!=null)rbA.position=player1SpawnPoint.position; if(rbB!=null)rbB.position=player2SpawnPoint.position; if(rbA!=null)prevP1Pos=rbA.position; if(rbB!=null)prevP2Pos=rbB.position; firstFrameAfterUnpause=true; RewindAnimator(fighterA_instance);RewindAnimator(fighterB_instance);}
+    void PrepareRound(int dRN){if(fighterA_instance!=null)fighterA_instance.ForcePaused(true);if(fighterB_instance!=null)fighterB_instance.ForcePaused(true);lowHealthWarningPlayedP1=false;lowHealthWarningPlayedP2=false;roundTimerSec=timeLimit;if(timerText!=null)timerText.text=roundTimerSec.ToString("00");InputBuffer iA=fighterA_instance?.GetComponent<InputBuffer>();InputBuffer iB=fighterB_instance?.GetComponent<InputBuffer>();if(iA!=null)iA.ClearPrev();if(iB!=null)iB.ClearPrev();postKOState=PostKOSubState.None;currentRoundVictor=null;currentRoundDefeated=null;currentRoundEndCondition=RoundEndType.None;}
+    
+    IEnumerator RoundLoop(int displayRoundNum)
     {
-        if (roundActive)
-        {
-            UpdateRunMeterUI();
-
-            if (timerText != null)
-            {
-                timerText.text = roundTimer.ToString("00");
-            }
-        }
-        else
-        {
-            ClearMeterUI();
-        }
-    }
-
-    void FixedUpdate()
-    {
-        if (!roundActive || fighterA == null || fighterB == null || fighterA.core == null || fighterB.core == null || rbA == null || rbB == null)
-        {
-            return;
-        }
-
-        if (firstFrameAfterUnpause)
-        {
-            if (rbA != null) prevP1Pos = rbA.position;
-            if (rbB != null) prevP2Pos = rbB.position;
-            firstFrameAfterUnpause = false;
-        }
-
-        Vector2 p1CurrentFramePos = rbA.position;
-        Vector2 p2CurrentFramePos = rbB.position;
-
-        // Step 1: Determine facing direction based on current positions
-        FaceOpponent(fighterA, fighterB); // This now only calls fighterA.core.SetFacing()
-        FaceOpponent(fighterB, fighterA); // This now only calls fighterB.core.SetFacing()
-                                          // FighterCharacter.FixedUpdate will handle its own graphics/animator updates
-
-        // Step 2: Apply distance clamping
-        EnforceMaxCharacterDistance(p1CurrentFramePos, p2CurrentFramePos);
-
-        // Step 3: Update previous positions for the next frame
-        // (using the Rigidbody positions which now reflect any clamping)
-        if (rbA != null) prevP1Pos = rbA.position;
-        if (rbB != null) prevP2Pos = rbB.position;
-    }
-
-    /* ───────────────────────────── Facing Logic ────────────────────── */
-    void FaceOpponent(FighterCharacter me, FighterCharacter foe)
-    {
-        if (me == null || foe == null || me.core == null) return;
-
-        // Get Rigidbody components to determine positions
-        // It's assumed these RBs are already cached (rbA, rbB) or can be fetched if needed,
-        // but for this method, let's use the direct references if they are passed.
-        // However, the most up-to-date positions are from rbA and rbB for player1 and player2.
-        Rigidbody2D meActualRb = (me == fighterA) ? rbA : rbB;
-        Rigidbody2D foeActualRb = (foe == fighterA) ? rbA : rbB;
-
-        if (meActualRb == null || foeActualRb == null) return;
-
-        bool shouldFaceRight = foeActualRb.position.x > meActualRb.position.x;
-        me.core.SetFacing(shouldFaceRight); // ONLY tell the core which way to face.
-                                            // FighterCharacter.cs will handle its own visual update.
-    }
-
-    /* ───────────────────────────── Max Distance Clamping Logic ("Hard Wall") ──────────────── */
-    void EnforceMaxCharacterDistance(Vector2 p1OriginalPos, Vector2 p2OriginalPos)
-    {
-        float currentXDistance = Mathf.Abs(p1OriginalPos.x - p2OriginalPos.x);
-        float tolerance = 0.001f;
-
-        if (currentXDistance > maxCharacterXDistance + tolerance)
-        {
-            Vector2 finalClampedP1 = p1OriginalPos;
-            Vector2 finalClampedP2 = p2OriginalPos;
-            bool p1IsLeft = p1OriginalPos.x < p2OriginalPos.x;
-
-            if (p1IsLeft)
-            {
-                float p1TargetX = p2OriginalPos.x - maxCharacterXDistance;
-                if (finalClampedP1.x < p1TargetX) finalClampedP1.x = p1TargetX;
-                float p2TargetX = finalClampedP1.x + maxCharacterXDistance; // Use P1's potentially new position
-                if (finalClampedP2.x > p2TargetX) finalClampedP2.x = p2TargetX;
-            }
-            else // P1 is right, P2 is left
-            {
-                float p1TargetX = p2OriginalPos.x + maxCharacterXDistance;
-                if (finalClampedP1.x > p1TargetX) finalClampedP1.x = p1TargetX;
-                float p2TargetX = finalClampedP1.x - maxCharacterXDistance; // Use P1's potentially new position
-                if (finalClampedP2.x < p2TargetX) finalClampedP2.x = p2TargetX;
-            }
-            
-            float distanceAfterHardClamps = Mathf.Abs(finalClampedP1.x - finalClampedP2.x);
-            if (Mathf.Abs(distanceAfterHardClamps - maxCharacterXDistance) > tolerance)
-            {
-                float remainingOverlapOrGap = distanceAfterHardClamps - maxCharacterXDistance;
-                float correction = remainingOverlapOrGap / 2.0f;
-                if (finalClampedP1.x < finalClampedP2.x)
-                {
-                    finalClampedP1.x += correction;
-                    finalClampedP2.x -= correction;
-                }
-                else
-                {
-                    finalClampedP1.x -= correction;
-                    finalClampedP2.x += correction;
-                }
-            }
-
-            // Apply final calculated positions to Rigidbodies only if they changed
-            if (rbA != null && Vector2.Distance(rbA.position, finalClampedP1) > tolerance) rbA.MovePosition(finalClampedP1);
-            if (rbB != null && Vector2.Distance(rbB.position, finalClampedP2) > tolerance) rbB.MovePosition(finalClampedP2);
-
-            // Sync the cores with these new, finally clamped positions
-            if (fighterA?.core != null) fighterA.core.SyncPosition(finalClampedP1);
-            if (fighterB?.core != null) fighterB.core.SyncPosition(finalClampedP2);
-        }
-    }
-
-    /* ───────────────────────────── Match Flow Coroutines & Helpers ───────────────────── */
-    IEnumerator MatchLoop()
-    {
-        winsA = winsB = 0;
-        UpdateWinCountUI();
-        ClearMeterUI();
-
-        while (true)
-        {
-            SnapRoundStartVisuals();
-            if (FadeController.I != null) yield return FadeController.I.FadeIn(fadeDuration);
-
-            for (int rd = 1; ; rd++)
-            {
-                PrepareRound(rd);
-                yield return StartCoroutine(RoundLoop(rd));
-                UpdateWinCountUI();
-                if (winsA >= roundsToWin || winsB >= roundsToWin) break;
-
-                if (FadeController.I != null) yield return FadeController.I.FadeOut(fadeDuration);
-                SnapRoundStartVisuals();
-                if (FadeController.I != null) yield return FadeController.I.FadeIn(fadeDuration);
-            }
-
-            UpdateWinCountUI();
-            yield return StartCoroutine(GameOverSequence());
-            
-            winsA = winsB = 0;
-            UpdateWinCountUI();
-            ClearMeterUI();
-        }
-    }
-
-    void SnapRoundStartVisuals()
-    {
-        if (fighterA != null) fighterA.RoundReset(spawnA, true);
-        if (fighterB != null) fighterB.RoundReset(spawnB, false);
-        if (rbA != null) rbA.position = spawnA;
-        if (rbB != null) rbB.position = spawnB;
-        if (rbA != null) prevP1Pos = rbA.position;
-        if (rbB != null) prevP2Pos = rbB.position;
-        firstFrameAfterUnpause = true;
-        RewindAnimator(fighterA);
-        RewindAnimator(fighterB);
-        ClearMeterUI();
-    }
-
-    void PrepareRound(int roundNum)
-    {
-        if (fighterA != null) fighterA.ForcePaused(true);
-        if (fighterB != null) fighterB.ForcePaused(true);
-        lowHealthPlayed = false;
-        roundTimer = timeLimit;
-        if (timerText != null) timerText.text = roundTimer.ToString("00");
-        InputBuffer inputA = fighterA?.GetComponent<InputBuffer>();
-        InputBuffer inputB = fighterB?.GetComponent<InputBuffer>();
-        if (inputA != null) inputA.ClearPrev();
-        if (inputB != null) inputB.ClearPrev();
-    }
-
-    IEnumerator RoundLoop(int roundNum)
-    {
-        SetAnimatorSpeed(fighterA, 1f);
-        SetAnimatorSpeed(fighterB, 1f);
-
-        if (centerMessage != null) centerMessage.text = $"ROUND {roundNum}";
-        AudioRoundManager.Play(roundNum == 1 ? GameEvent.RoundOne : GameEvent.RoundTwo);
+        SetAnimatorSpeed(fighterA_instance, 1f); SetAnimatorSpeed(fighterB_instance, 1f);
+        if (centerMessage != null) centerMessage.text = $"ROUND {displayRoundNum}";
+        AudioRoundManager.Play(displayRoundNum == 1 ? GameEvent.RoundOne : (displayRoundNum == 2 ? GameEvent.RoundTwo : GameEvent.RoundThree));
         yield return new WaitForSeconds(introFreeze);
         if (centerMessage != null) centerMessage.text = string.Empty;
-
-        if (centerMessage != null) centerMessage.text = "FIGHT!";
-        AudioRoundManager.Play(GameEvent.Fight);
+        if (centerMessage != null) centerMessage.text = "FIGHT!"; AudioRoundManager.Play(GameEvent.Fight);
         yield return new WaitForSeconds(fightFlash);
         if (centerMessage != null) centerMessage.text = string.Empty;
+        
+        BeginCombat(); // Unpauses fighters, resets some round states
 
-        BeginCombat();
-
-        float lastTickPlayedTime = Time.time;
+        float lastSecondUpdateTime = Time.time;
         while (roundActive)
         {
-            if (roundTimer <= 10 && roundTimer > 0)
-            {
-                if (Time.time >= lastTickPlayedTime + 0.95f)
-                {
-                    AudioRoundManager.Play(GameEvent.Last10SecTick);
-                    lastTickPlayedTime = Time.time;
-                }
-            }
-            if (!lowHealthPlayed && fighterA?.core != null && fighterB?.core != null)
-            {
-                if (fighterA.Health <= fighterA.core.Health * 0.1f || fighterB.Health <= fighterB.core.Health * 0.1f)
-                {
-                    AudioRoundManager.Play(GameEvent.LastHitWarning);
-                    lowHealthPlayed = true;
-                }
-            }
-            bool p1Dead = (fighterA != null && fighterA.Health <= 0);
-            bool p2Dead = (fighterB != null && fighterB.Health <= 0);
-            if (p1Dead || p2Dead || roundTimer <= 0) EndCombat();
+            bool p1IsDead = (fighterA_instance != null && fighterA_instance.Health <= 0);
+            bool p2IsDead = (fighterB_instance != null && fighterB_instance.Health <= 0);
+            bool timeHasExpired = roundTimerSec <= 0;
 
-            yield return new WaitForSeconds(1.0f);
-            if (roundActive) roundTimer--;
+            if (p1IsDead || p2IsDead || timeHasExpired)
+            {
+                EndCombat(); // Pauses fighters, sets roundActive = false
+                ProcessRoundOutcome(p1IsDead, p2IsDead, timeHasExpired); // Determines victor, updates win counts
+                break; 
+            }
+
+            if (Time.time - lastSecondUpdateTime >= 1.0f)
+            {
+                if (roundActive) roundTimerSec--;
+                lastSecondUpdateTime += 1.0f;
+                if (roundTimerSec <= 10 && roundTimerSec > 0 && roundActive) AudioRoundManager.Play(GameEvent.Last10SecTick);
+            }
+            yield return null;
         }
-        yield return new WaitForSeconds(koFreeze);
-        DeclareRoundWinner();
-        yield return new WaitForSeconds(2f);
+
+        // --- Post-Round Active Logic ---
+        bool matchWonThisRound = (currentRoundVictor != null && ((currentRoundVictor == fighterA_instance && winsA >= roundsToWin) || (currentRoundVictor == fighterB_instance && winsB >= roundsToWin)));
+        
+        int previousWinsA = (currentRoundVictor == fighterA_instance && currentRoundEndCondition != RoundEndType.DoubleKO && currentRoundEndCondition != RoundEndType.TimeUpDraw) ? winsA - 1 : winsA;
+        int previousWinsB = (currentRoundVictor == fighterB_instance && currentRoundEndCondition != RoundEndType.DoubleKO && currentRoundEndCondition != RoundEndType.TimeUpDraw) ? winsB - 1 : winsB;
+        
+        bool mercyConditionsMetForThisKO = currentRoundEndCondition == RoundEndType.KO && currentRoundVictor != null &&
+                                      currentRoundVictor.core.CanPerformMercyThisMatch && 
+                                      currentRoundDefeated.core.IsMercyEligibleThisRound &&
+                                      currentMatchRoundNumber == 3 && 
+                                      previousWinsA == 1 && previousWinsB == 1;
+
+        if (matchWonThisRound && currentRoundEndCondition == RoundEndType.KO && !mercyConditionsMetForThisKO)
+        {
+            yield return StartCoroutine(HandleFinisherSequence(currentRoundVictor, currentRoundDefeated, false)); // isMercyEligibleRound = false
+        }
+        else if (mercyConditionsMetForThisKO) // Mercy conditions are met
+        {
+             yield return StartCoroutine(HandleFinisherSequence(currentRoundVictor, currentRoundDefeated, true)); // isMercyEligibleRound = true
+             if (postKOState == PostKOSubState.MercyGranted)
+             {
+                 yield break; // Exit RoundLoop, MatchLoop will continue to effectively restart the round due to Mercy
+             }
+        }
+        else // Normal round end (not a match-deciding KO), or match won by Time Up, or Draw
+        {
+            // This calls PlayWinAnnouncementSequence for winner/loser animations and audio
+            yield return StartCoroutine(DeclareRoundOutcomeAndAnimate()); 
+            yield return new WaitForSeconds(koFreeze + 1.0f); // Adjusted wait time
+        }
     }
+
+    void ProcessRoundOutcome(bool p1Dead, bool p2Dead, bool timeUp) { /* As before */ currentRoundVictor = null; currentRoundDefeated = null; currentRoundEndCondition = RoundEndType.None; if (p1Dead && p2Dead) { currentRoundEndCondition = RoundEndType.DoubleKO; } else if (p1Dead) { currentRoundVictor = fighterB_instance; currentRoundDefeated = fighterA_instance; currentRoundEndCondition = RoundEndType.KO; } else if (p2Dead) { currentRoundVictor = fighterA_instance; currentRoundDefeated = fighterB_instance; currentRoundEndCondition = RoundEndType.KO; } else if (timeUp) { if (fighterA_instance.Health > fighterB_instance.Health) { currentRoundVictor = fighterA_instance; currentRoundDefeated = fighterB_instance; currentRoundEndCondition = RoundEndType.TimeUpWin; } else if (fighterB_instance.Health > fighterA_instance.Health) { currentRoundVictor = fighterB_instance; currentRoundDefeated = fighterA_instance; currentRoundEndCondition = RoundEndType.TimeUpWin; } else { currentRoundEndCondition = RoundEndType.TimeUpDraw; } } if (currentRoundVictor != null) { if (currentRoundVictor == fighterA_instance) winsA++; else winsB++; if(currentRoundDefeated?.core != null) currentRoundDefeated.core.SetKOAsFriendly(false); } }
     
-    IEnumerator GameOverSequence()
+    IEnumerator HandleFinisherSequence(FighterCharacter winner, FighterCharacter loser, bool isMercyPossibleThisRound)
     {
-        if (centerMessage != null)
+        if (winner?.core == null || loser?.core == null) { postKOState = PostKOSubState.ProceedToRoundEnd; yield break; }
+
+        if (timerText != null) timerText.gameObject.SetActive(false); // Hide round timer
+
+        if (centerMessage != null) centerMessage.text = (loser.core.CharInfo.gender == Gender.Female) ? "FINISH HER!" : "FINISH HIM!";
+        AudioRoundManager.Play((loser.core.CharInfo.gender == Gender.Female) ? GameEvent.FinishHer : GameEvent.FinishHim);
+        
+        loser.core.SetState(CharacterState.FinishHimVictim); // Loser plays dizzy animation
+        winner.core.SetState(CharacterState.FinishHimWinner); // Winner can move
+        winner.ForcePaused(false); 
+        loser.ForcePaused(true); // Loser is unresponsive
+        
+        postKOState = PostKOSubState.AwaitingFinisherInput;
+        float finisherCountdown = FINISHER_TIMER_DURATION; 
+        bool finisherActionTaken = false;
+
+        while (finisherCountdown > 0 && !finisherActionTaken)
         {
-            string matchWinnerText = "MATCH OVER";
-            if (winsA >= roundsToWin) matchWinnerText = "PLAYER 1 WINS THE MATCH!";
-            else if (winsB >= roundsToWin) matchWinnerText = "PLAYER 2 WINS THE MATCH!";
-            centerMessage.text = matchWinnerText;
+            InputBuffer winnerInput = winner.GetComponent<InputBuffer>();
+            // Display finisherCountdown if desired (e.g. centerMessage.text = finisherCountdown.ToString("F1"))
+
+            if (isMercyPossibleThisRound && winner.core.CanPerformMercyThisMatch && CheckMercyInput(winnerInput))
+            {
+                Debug.Log(winner.name + " performs Mercy!"); loser.core.ReviveForMercy(); winner.core.MarkMercyAsPerformedByThisPlayer(); matchAnimalityEnabled = true;
+                if (centerMessage != null) centerMessage.text = "MERCY!"; AudioRoundManager.Play(GameEvent.Mercy);
+                yield return new WaitForSeconds(1.5f); 
+                postKOState = PostKOSubState.MercyGranted; BeginCombat(); finisherActionTaken = true; 
+                if (timerText != null) timerText.gameObject.SetActive(true); // Re-show round timer
+                yield break; 
+            }
+            
+            // TODO: Replace with actual input sequence detection for Fatalities, Friendships, etc.
+            if (winnerInput.State.PressedHighPunch) // Placeholder for any finisher
+            {
+                finisherActionTaken = true;
+                if (!winner.core.BlockedThisRound) { Debug.Log(winner.name + " performs Friendship/Babality! (Placeholder)"); /* Play Anim */ }
+                else { Debug.Log(winner.name + " performs Fatality! (Placeholder)");  /* Play Anim */ }
+                loser.core.SetState(CharacterState.Knockdown); // Loser gets finished
+            }
+            else if (winner.core.State == CharacterState.Attacking && winner.core.IsMoveDataValid && winner.core.CurrentMove.tag == "DefaultHitFinisher")
+            {
+                 Debug.Log(winner.name + " lands a normal hit to end Finish Him sequence.");
+                 loser.core.SetState(CharacterState.Knockdown);
+                 finisherActionTaken = true;
+            }
+            finisherCountdown -= Time.deltaTime; 
+            yield return null;
         }
-        AudioRoundManager.Play(GameEvent.Flawless); // Consider a "Match Over" sound
-        yield return new WaitForSeconds(3f);
-        if (FadeController.I != null) yield return FadeController.I.FadeOut(gameOverFadeDuration);
-        if (centerMessage != null) centerMessage.text = string.Empty;
-    }
 
-    void BeginCombat()
-    {
-        if (fighterA != null) fighterA.ForcePaused(false);
-        if (fighterB != null) fighterB.ForcePaused(false);
-        roundActive = true;
-        firstFrameAfterUnpause = true; // Ensure prevPos is re-initialized correctly on first FixedUpdate
-        if (rbA != null && fighterA != null) rbA.position = fighterA.transform.position;
-        if (rbB != null && fighterB != null) rbB.position = fighterB.transform.position;
-        // Sync core positions after setting Rigidbody positions and unpausing
-        if (fighterA?.core != null && rbA != null) fighterA.core.SyncPosition(rbA.position);
-        if (fighterB?.core != null && rbB != null) fighterB.core.SyncPosition(rbB.position);
-        roundTimer = timeLimit;
-        lowHealthPlayed = false;
-    }
-
-    void EndCombat()
-    {
-        roundActive = false;
-        if (fighterA != null) fighterA.ForcePaused(true);
-        if (fighterB != null) fighterB.ForcePaused(true);
-        SetAnimatorSpeed(fighterA, 0f);
-        SetAnimatorSpeed(fighterB, 0f);
-        if (timerText != null && roundTimer <= 0 && fighterA?.Health > 0 && fighterB?.Health > 0)
-        {
-            timerText.text = "00";
+        if (!finisherActionTaken && loser?.core != null) 
+        { 
+            if (centerMessage != null) centerMessage.text = (winner.core?.CharInfo?.characterName ?? "WINNER").ToUpper() + " WINS";
+            loser.core.SetState(CharacterState.Knockdown); 
+            winner.PlayWinAnimation(); // Winner plays victory
+            AudioRoundManager.Play(GameEvent.Wins); // Play general wins sound
+            loser.core.SetMercyEligibility(false); 
+            Debug.Log("Finisher timer expired. " + loser.name + " collapses."); 
         }
+        postKOState = finisherActionTaken ? PostKOSubState.FinisherPerformed : PostKOSubState.ProceedToRoundEnd;
+        if (timerText != null) timerText.gameObject.SetActive(true); // Re-show round timer
+        yield return new WaitForSeconds(finisherActionTaken ? 2.0f : koFreeze); // Longer pause if finisher, shorter if default
     }
 
-    void DeclareRoundWinner()
+    bool CheckMercyInput(InputBuffer input){ /* TODO: UMK3 Mercy: Hold Run, D,D,D, Release Run. */ return input.State.PressedBlock && input.State.Down && input.State.Run; }
+    IEnumerator GameOverSequence(FighterCharacter matchWinner){if(centerMessage!=null){centerMessage.text=(matchWinner==fighterA_instance?"PLAYER 1":"PLAYER 2")+" WINS MATCH!";}AudioRoundManager.Play(GameEvent.Flawless);yield return new WaitForSeconds(3f);if(FadeController.I!=null)yield return FadeController.I.FadeOut(gameOverFadeDuration);if(centerMessage!=null)centerMessage.text=string.Empty;}
+    void BeginCombat(){if(fighterA_instance!=null)fighterA_instance.ForcePaused(false);if(fighterB_instance!=null)fighterB_instance.ForcePaused(false);roundActive=true;firstFrameAfterUnpause=true;if(rbA!=null&&fighterA_instance!=null)rbA.position=fighterA_instance.transform.position;if(rbB!=null&&fighterB_instance!=null)rbB.position=fighterB_instance.transform.position;if(fighterA_instance?.core!=null&&rbA!=null)fighterA_instance.core.SyncPosition(rbA.position);if(fighterB_instance?.core!=null&&rbB!=null)fighterB_instance.core.SyncPosition(rbB.position);roundTimerSec=timeLimit;lowHealthWarningPlayedP1=false;lowHealthWarningPlayedP2=false;}
+    void EndCombat(){roundActive=false;if(fighterA_instance!=null)fighterA_instance.ForcePaused(true);if(fighterB_instance!=null)fighterB_instance.ForcePaused(true);SetAnimatorSpeed(fighterA_instance,0f);SetAnimatorSpeed(fighterB_instance,0f);}
+    
+    IEnumerator DeclareRoundOutcomeAndAnimate()
     {
-        string winnerText = "DRAW ROUND";
-        GameEvent winEvent = GameEvent.Wins; // Default win sound
-        int healthA = (fighterA?.core != null) ? fighterA.Health : -1;
-        int healthB = (fighterB?.core != null) ? fighterB.Health : -1;
+        string outcomeText = "DRAW";
+        FighterCharacter winnerForAudio = null;
 
-        if (healthA > 0 || healthB > 0) // Check if the round ended with at least one player having health (not a double KO from external source)
+        if (currentRoundVictor != null && currentRoundVictor.core?.CharInfo != null)
         {
-            if (healthA > healthB) { winsA++; winnerText = "PLAYER 1 WINS"; }
-            else if (healthB > healthA) { winsB++; winnerText = "PLAYER 2 WINS"; }
-            // If healthA == healthB, it remains "DRAW ROUND"
+            outcomeText = currentRoundVictor.core.CharInfo.characterName.ToUpper() + " WINS ROUND";
+            winnerForAudio = currentRoundVictor;
+            currentRoundVictor.PlayWinAnimation();
+            if (currentRoundDefeated?.core != null && currentRoundDefeated.core.Health <= 0)
+            {
+                currentRoundDefeated.core.SetState(CharacterState.Knockdown);
+            }
+        }
+        else if (currentRoundEndCondition == RoundEndType.TimeUpDraw || currentRoundEndCondition == RoundEndType.DoubleKO)
+        {
+            outcomeText = "DRAW";
+            fighterA_instance?.core?.SetState(CharacterState.Idle);
+            fighterB_instance?.core?.SetState(CharacterState.Idle);
+        }
+
+        if (centerMessage != null) centerMessage.text = outcomeText;
+        
+        if (winnerForAudio != null && winnerForAudio.core.CharInfo.nameAudioClip != null)
+        {
+            AudioSource.PlayClipAtPoint(winnerForAudio.core.CharInfo.nameAudioClip, Camera.main ? Camera.main.transform.position : Vector3.zero);
+            yield return new WaitForSeconds(winnerForAudio.core.CharInfo.nameAudioClip.length + 0.1f); // Add slight delay
+        }
+        else if (winnerForAudio != null) // Has a winner but no name audio
+        {
+            yield return new WaitForSeconds(0.5f); // Default delay
         }
         
-        if (centerMessage != null) centerMessage.text = winnerText;
-        AudioRoundManager.Play(winEvent);
-        UpdateWinCountUI(); // Update win counts (if using dedicated UI for it)
-    }
+        if (winnerForAudio != null) { AudioRoundManager.Play(GameEvent.Wins); }
+        else { /* Play draw sound if applicable */ }
 
-    // --- UI Update Methods ---
-    void UpdateWinCountUI()
-    {
-        // Example: if you have public Text winCountTextA; public Text winCountTextB;
-        // if (winCountTextA != null) winCountTextA.text = "P1: " + winsA;
-        // if (winCountTextB != null) winCountTextB.text = "P2: " + winsB;
+        UpdateWinCountUI();
     }
-
-    void UpdateRunMeterUI()
-    {
-        // Called from Update() when roundActive is true.
-        if (fighterA?.core != null && meterTextA != null)
-        {
-            if (FighterCharacterCore.METER_CAPACITY_FLOAT > 0) // Use the float constant
-            {
-                float p1MeterPercentage = fighterA.core.CurrentMeterValue / FighterCharacterCore.METER_CAPACITY_FLOAT;
-                meterTextA.text = Mathf.RoundToInt(p1MeterPercentage * 100) + "%";
-            }
-            else meterTextA.text = "N/A";
-        }
-        else if (meterTextA != null) meterTextA.text = "---"; // Default if no P1
-
-        if (fighterB?.core != null && meterTextB != null)
-        {
-            if (FighterCharacterCore.METER_CAPACITY_FLOAT > 0) // Use the float constant
-            {
-                float p2MeterPercentage = fighterB.core.CurrentMeterValue / FighterCharacterCore.METER_CAPACITY_FLOAT;
-                meterTextB.text = Mathf.RoundToInt(p2MeterPercentage * 100) + "%";
-            }
-            else meterTextB.text = "N/A";
-        }
-        else if (meterTextB != null) meterTextB.text = "---"; // Default if no P2
-    }
-
-    void ClearMeterUI()
-    {
-        if (meterTextA != null) meterTextA.text = "100%"; // Default display when round not active
-        if (meterTextB != null) meterTextB.text = "100%";
-    }
-
-    /* ────────── Animator Helpers ───────── */
-    void SetAnimatorSpeed(FighterCharacter fc, float speed)
-    {
-        if (fc == null) return;
-        Animator anim = fc.GetComponentInChildren<Animator>() ?? fc.GetComponent<Animator>();
-        if (anim != null) anim.speed = speed;
-    }
-
-    void RewindAnimator(FighterCharacter fc)
-    {
-        if (fc == null) return;
-        Animator anim = fc.GetComponentInChildren<Animator>() ?? fc.GetComponent<Animator>();
-        if (anim != null && anim.runtimeAnimatorController != null)
-        {
-            const string DEFAULT_STATE_NAME = "Locomotion";
-            int layerIndex = 0;
-            int defaultStateHash = Animator.StringToHash(DEFAULT_STATE_NAME);
-            if (anim.HasState(layerIndex, defaultStateHash)) anim.Play(defaultStateHash, layerIndex, 0f);
-            else if (anim.GetCurrentAnimatorStateInfo(layerIndex).fullPathHash != 0)
-                anim.Play(anim.GetCurrentAnimatorStateInfo(layerIndex).fullPathHash, layerIndex, 0f);
-            anim.Update(0f);
-        }
-    }
+    void CheckLowHealthWarnings(){if(fighterA_instance?.core!=null&&!lowHealthWarningPlayedP1&&fighterA_instance.Health>0&&fighterA_instance.Health<=FighterCharacterCore.MAX_HEALTH*LOW_HEALTH_THRESHOLD_PERCENT){AudioRoundManager.Play(GameEvent.LastHitWarning);lowHealthWarningPlayedP1=true;}if(fighterB_instance?.core!=null&&!lowHealthWarningPlayedP2&&fighterB_instance.Health>0&&fighterB_instance.Health<=FighterCharacterCore.MAX_HEALTH*LOW_HEALTH_THRESHOLD_PERCENT){AudioRoundManager.Play(GameEvent.LastHitWarning);lowHealthWarningPlayedP2=true;}}
+    void UpdateWinCountUI(){/* For dedicated win UI */}
+    void OnGUI(){if(!Application.isPlaying||(fighterA_instance==null&&fighterB_instance==null))return;if(roundActive||postKOState==PostKOSubState.AwaitingFinisherInput||postKOState==PostKOSubState.MercyGranted){DrawPlayerLifebar(fighterA_instance,true);DrawPlayerLifebar(fighterB_instance,false);}}
+    void DrawPlayerLifebar(FighterCharacter p,bool isP1){if(p?.core==null)return;float cH=p.Health;float mH=FighterCharacterCore.MAX_HEALTH;float fR=(mH>0)?Mathf.Clamp01(cH/mH):0f;int fWPx=Mathf.RoundToInt(fR*LIFE_BAR_WIDTH_PX);Rect bgR,fgR;Color eC=new Color(0.3f,0.3f,0.3f,0.8f);Color fC=Color.green;bool useFlash=false;if(p.Health>0&&p.Health<=FighterCharacterCore.MAX_HEALTH*LOW_HEALTH_THRESHOLD_PERCENT){if(p==fighterA_instance&&lowHealthWarningPlayedP1)useFlash=true;if(p==fighterB_instance&&lowHealthWarningPlayedP2)useFlash=true;}if(useFlash)fC=(Time.time%0.4f<0.2f)?Color.red:new Color(1f,0.3f,0.3f);if(isP1){bgR=new Rect(LIFE_BAR_P1_X_POS,LIFE_BAR_Y_POS,LIFE_BAR_WIDTH_PX,LIFE_BAR_HEIGHT_PX);fgR=new Rect(bgR.x,bgR.y,fWPx,bgR.height);}else{float p2X=Screen.width-LIFE_BAR_P1_X_POS-LIFE_BAR_WIDTH_PX;bgR=new Rect(p2X,LIFE_BAR_Y_POS,LIFE_BAR_WIDTH_PX,LIFE_BAR_HEIGHT_PX);fgR=new Rect(bgR.xMax-fWPx,bgR.y,fWPx,bgR.height);}GUI.color=eC;GUI.DrawTexture(bgR,Texture2D.whiteTexture,ScaleMode.StretchToFill);GUI.color=fC;GUI.DrawTexture(fgR,Texture2D.whiteTexture,ScaleMode.StretchToFill);GUI.color=Color.black;DrawGUIRectOutline(bgR,1);GUI.color=Color.white;}
+    void DrawGUIRectOutline(Rect rect,int thick){GUI.DrawTexture(new Rect(rect.x,rect.y,rect.width,thick),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(rect.x,rect.yMax-thick,rect.width,thick),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(rect.x,rect.y,thick,rect.height),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(rect.xMax-thick,rect.y,thick,rect.height),Texture2D.whiteTexture);}
+    void SetAnimatorSpeed(FighterCharacter fc,float speed){if(fc==null)return;Animator anim=fc.GetComponentInChildren<Animator>()??fc.GetComponent<Animator>();if(anim!=null)anim.speed=speed;}
+    void RewindAnimator(FighterCharacter fc){if(fc==null)return;Animator anim=fc.GetComponentInChildren<Animator>()??fc.GetComponent<Animator>();if(anim!=null&&anim.runtimeAnimatorController!=null){const string DSN="Locomotion";int lI=0;int dSH=Animator.StringToHash(DSN);if(anim.HasState(lI,dSH))anim.Play(dSH,lI,0f);else if(anim.GetCurrentAnimatorStateInfo(lI).fullPathHash!=0)anim.Play(anim.GetCurrentAnimatorStateInfo(lI).fullPathHash,lI,0f);anim.Update(0f);}}
 }

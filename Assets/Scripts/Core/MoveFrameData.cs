@@ -27,9 +27,12 @@ public struct MoveFrameData
     public float        pushY;         // vertical knock-back
     public bool         knockDown;     // true = sweeps / KD
     public bool         unblockable;   // true = ignores guard
+    
+    public bool canMoveDuringStartUp; // NEW: True if character can perform standard movement during startup frames
+    public bool canMoveDuringActive;  // NEW: True if character can perform standard movement during active frames
 
     // ── Added for PSX-style block system ─────────────────────
-    public bool         noChip;        // true = does 0 chip on block
+    public bool noChip;        // true = does 0 chip on block
     public AttackPower  power;         // Light / Medium / Heavy / Special
 }
 
