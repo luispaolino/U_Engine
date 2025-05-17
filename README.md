@@ -3,6 +3,32 @@
 This project is a 2.5D fighting game engine developed in Unity, aiming to replicate and build upon mechanics inspired by classic arcade fighters like Ultimate Mortal Kombat 3.
 It features a robust character core, round management, special move data handling via ScriptableObjects, and various debug tools.
 
+## Basic Controls
+
+The default keyboard controls are set up as follows. These are typically defined in `PlayerControlsProfile` ScriptableObjects assigned to each player via the `RoundSystem`.
+
+**Player 1:**
+
+*   **Movement:**
+    *   **A:** Move Left
+    *   **S:** Crouch / Move Down
+    *   **D:** Move Right
+    *   **W:** Jump / Move Up
+*   **Actions:**
+    *   **T:** Run (Hold in conjunction with Forward)
+    *   **G:** Block
+
+**Player 2:**
+
+*   **Movement:**
+    *   **Left Arrow:** Move Left
+    *   **Down Arrow:** Crouch / Move Down
+    *   **Right Arrow:** Move Right
+    *   **Up Arrow:** Jump / Move Up
+*   **Actions:**
+    *   **O:** Run (Hold in conjunction with Forward)
+    *   **L:** Block
+
 ## Debugger Keys
 
 The `Debugger.cs` script (formerly `HitboxDebugger.cs`) uses the following keys during **Play Mode** to toggle visualizations:
