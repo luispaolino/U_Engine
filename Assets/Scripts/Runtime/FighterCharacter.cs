@@ -99,10 +99,22 @@ void UpdateGraphicsAndAnimatorOrientation()
             core.State != CharacterState.Attacking)      // Don't interrupt an attack for a win pose
         {
             core.SetState(CharacterState.Idle); // Or a specific CharacterState.VictoryPose
-            _anim.SetTrigger("Win"); // Ensure you have a "Win" trigger in your Animator
-            Debug.Log(name + " playing Win animation trigger.");
+            _anim.SetTrigger("Victory"); // Ensure you have a "Win" trigger in your Animator
+            //Debug.Log(name + " playing Win animation trigger.");
         }
     }
 
-    public void PlayDefeatedAnimation() { if (_anim != null && core != null && core.State == CharacterState.Knockdown && core.Health <= 0) { Debug.Log(name + " Defeated."); } }
+    public void PlayDefeatedAnimation()
+    {
+        if (_anim != null && core != null && core.State == CharacterState.Knockdown && core.Health <= 0)
+        {
+            //core.SetState(CharacterState.Idle);
+            _anim.SetTrigger("Defeated");
+            Debug.Log("Test if it is Knockdown");
+        }
+        else if (_anim == null)
+        {
+            Debug.LogWarning(name + ": Animator is null, cannot play Defeated animation.");
+        }
+    }
 }

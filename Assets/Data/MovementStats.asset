@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MovementStatsSO
   walkForwardVelocity: 3.5
   walkBackVelocity: 2.5
-  runVelocity: 6
+  runVelocity: 5
   jumpUpVelocity: 7
   jumpForwardHorizontalVelocity: 6
   jumpBackHorizontalVelocity: 5
