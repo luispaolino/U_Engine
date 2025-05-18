@@ -1,7 +1,14 @@
 fileFormatVersion: 2
 guid: cb83bc4008d33ca4d970aa193b1801a5
+AssetOrigin:
+  serializedVersion: 1
+  productId: 291284
+  packageName: MC Sample - Believable 3D Animations by MoCap Central
+  packageVersion: 1.1.0
+  assetPath: Assets/MoCapCentral/MC_Sample/Animations/Emotions/MCU_am_Stand_React_Excited_01_Loop.FBX
+  uploadId: 680140
 ModelImporter:
-  serializedVersion: 22200
+  serializedVersion: 24200
   internalIDToNameTable: []
   externalObjects: {}
   materials:
@@ -16,8 +23,6 @@ ModelImporter:
     optimizeGameObjects: 0
     removeConstantScaleCurves: 0
     motionNodeName: 
-    rigImportErrors: 
-    rigImportWarnings: 
     animationImportErrors: 
     animationImportWarnings: 
     animationRetargetingWarnings: 
@@ -39,7 +44,7 @@ ModelImporter:
       firstFrame: 0
       lastFrame: 84
       wrapMode: 2
-      orientationOffsetY: 0
+      orientationOffsetY: -90
       level: 0
       cycleOffset: 0
       loop: 0
@@ -87,6 +92,9 @@ ModelImporter:
     maxBonesPerVertex: 4
     minBoneWeight: 0.001
     optimizeBones: 1
+    generateMeshLods: 0
+    meshLodGenerationFlags: 0
+    maximumMeshLod: -1
     meshOptimizationFlags: -1
     indexFormat: 0
     secondaryUVAngleDistortion: 8
@@ -1034,8 +1042,7 @@ ModelImporter:
     hasTranslationDoF: 0
     hasExtraRoot: 1
     skeletonHasParents: 1
-  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: 5958d20394757cd4092feaf67ab80b97,
-    type: 3}
+  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: 5958d20394757cd4092feaf67ab80b97, type: 3}
   autoGenerateAvatarMappingIfUnspecified: 1
   animationType: 3
   humanoidOversampling: 1
@@ -1047,10 +1054,3 @@ ModelImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 291284
-  packageName: MC Sample - Believable 3D Animations by MoCap Central
-  packageVersion: 1.1.0
-  assetPath: Assets/MoCapCentral/MC_Sample/Animations/Emotions/MCU_am_Stand_React_Excited_01_Loop.FBX
-  uploadId: 680140
