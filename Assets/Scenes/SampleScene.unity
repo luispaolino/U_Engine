@@ -1408,8 +1408,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DebugDamageP2
   roundSystem: {fileID: 808535525}
-  damageToApply: 100
+  damageToApply: 900
   damageKey: 120
+  debugHitReaction: 1
+  debugHitPower: 1
 --- !u!1 &808535522
 GameObject:
   m_ObjectHideFlags: 0

@@ -17,5 +17,6 @@ public enum GameEvent
     FlawlessVictory,
     Wins,
     Mercy,
-    Name_Scorpion
+    Name_Scorpion,
+    GameOver
 }

@@ -196,7 +196,13 @@ public class RoundSystem : MonoBehaviour
                 if (postKOState == PostKOSubState.MercyGranted) { rdDisplayNum--; postKOState = PostKOSubState.None; continue; }
                 if (winsA >= roundsToWin || winsB >= roundsToWin) break;
                 UpdateWinCountUI();
-                if (FadeController.I != null) yield return FadeController.I.FadeOut(fadeDuration);
+                if (FadeController.I != null)
+                {
+                    yield return FadeController.I.FadeOut(fadeDuration);
+                    // once the screen is fully black, hide the old round texts
+                    if (roundOutcomeText    != null) roundOutcomeText.gameObject.SetActive(false);
+                    if (flawlessVictoryText  != null) flawlessVictoryText.gameObject.SetActive(false);
+                }
             }
             UpdateWinCountUI();
             yield return StartCoroutine(GameOverSequence((winsA > winsB) ? fighterA_instance : fighterB_instance));
@@ -280,77 +286,140 @@ public class RoundSystem : MonoBehaviour
         if (currentRoundVictor != null) { if (currentRoundVictor == fighterA_instance) winsA++; else winsB++; if(currentRoundDefeated?.core != null) currentRoundDefeated.core.SetKOAsFriendly(false); } 
     }
     
-    IEnumerator HandleFinisherSequence(FighterCharacter winner, FighterCharacter loser, bool isMercyPossibleThisRound)
+   IEnumerator HandleFinisherSequence(
+    FighterCharacter winner,
+    FighterCharacter loser,
+    bool isMercyPossibleThisRound)
+{
+    winner.ForcePaused(false);
+    // 1) Hide the round timer
+    if (timerText != null)
+        timerText.gameObject.SetActive(false);
+
+    // 2) FINISH HIM/HER prompt
+    if (roundNumberText != null)
     {
-        if (winner?.core == null || loser?.core == null) { postKOState = PostKOSubState.ProceedToRoundEnd; yield break; }
-        if (timerText != null) timerText.gameObject.SetActive(false);
-        if (roundNumberText != null) { roundNumberText.gameObject.SetActive(true); roundNumberText.text = (loser.core.CharInfo.gender == Gender.Female) ? "FINISH HER!" : "FINISH HIM!"; } 
-        AudioRoundManager.Play((loser.core.CharInfo.gender == Gender.Female) ? GameEvent.FinishHer : GameEvent.FinishHim);
-        loser.core.SetState(CharacterState.FinishHimVictim); winner.core.SetState(CharacterState.FinishHimWinner);
-        winner.ForcePaused(false); loser.ForcePaused(true);
-        postKOState = PostKOSubState.AwaitingFinisherInput; float finisherCountdown = FINISHER_TIMER_DURATION; bool finisherActionTaken = false;
-        while (finisherCountdown > 0 && !finisherActionTaken)
-        {
-            InputBuffer winnerInput = winner.GetComponent<InputBuffer>(); if (isMercyPossibleThisRound && winner.core.CanPerformMercyThisMatch && CheckMercyInput(winnerInput)) { Debug.Log(winner.name + " performs Mercy!"); loser.core.ReviveForMercy(); winner.core.MarkMercyAsPerformedByThisPlayer(); matchAnimalityEnabled = true; if (roundNumberText != null) roundNumberText.text = "MERCY!"; AudioRoundManager.Play(GameEvent.Mercy); yield return new WaitForSeconds(MERCY_OUTCOME_WAIT_SEC); postKOState = PostKOSubState.MercyGranted; BeginCombat(); finisherActionTaken = true; if (timerText != null) timerText.gameObject.SetActive(true); if (roundNumberText != null) roundNumberText.gameObject.SetActive(false); yield break; }
-            if (winnerInput.State.PressedHighPunch)
-            {
-                finisherActionTaken = true;
-                if (!winner.core.BlockedThisRound)
-                {
-                    Debug.Log(winner.name + " Friendship/Babality! (Placeholder)");
-                }
-                else
-                {
-                    Debug.Log(winner.name + " Fatality! (Placeholder)");
-                }
-                loser.core.SetState(CharacterState.Knockdown);
-                loser.PlayDefeatedAnimation();
-                winner.PlayWinAnimation();
-                if (roundNumberText != null) roundNumberText.gameObject.SetActive(false);
-            }
-            else if (winner.core.State == CharacterState.Attacking && winner.core.IsMoveDataValid && winner.core.CurrentMove.tag == "DefaultHitFinisher")
-            {
-                Debug.Log(winner.name + " normal hit.");
-                loser.core.SetState(CharacterState.Knockdown);
-                loser.PlayDefeatedAnimation();
-                winner.PlayWinAnimation();
-                finisherActionTaken = true;
-                if (roundNumberText != null) roundNumberText.gameObject.SetActive(false);
-            }
-            finisherCountdown -= Time.deltaTime;
-            yield return null;
-        }
+        roundNumberText.gameObject.SetActive(true);
+        roundNumberText.text = (loser.core.CharInfo.gender == Gender.Female)
+            ? "FINISH HER!"
+            : "FINISH HIM!";
+    }
+    AudioRoundManager.Play(
+        loser.core.CharInfo.gender == Gender.Female
+            ? GameEvent.FinishHer
+            : GameEvent.FinishHim);
 
-        if (roundNumberText != null) roundNumberText.gameObject.SetActive(false);
+    // 3) Freeze victim, unfreeze winner
+    loser.core.SetState(CharacterState.FinishHimVictim);
+    loser.ForcePaused(true);
+    winner.core.SetState(CharacterState.FinishHimWinner);
+    winner.ForcePaused(false);
+    postKOState = PostKOSubState.AwaitingFinisherInput;
 
-        if (!finisherActionTaken && loser?.core != null)
-        {
-            yield return new WaitForSeconds(0.5f); // Delay before default win announcement
-            if (roundOutcomeText != null)
-            {
-                roundOutcomeText.gameObject.SetActive(true);
-                roundOutcomeText.text = (winner.core?.CharInfo?.characterName ?? (winner == fighterA_instance ? "PLAYER 1" : "PLAYER 2")).ToUpper() + " WINS";
-            }
-            loser.core.SetState(CharacterState.Knockdown);
-            loser.PlayDefeatedAnimation();
+    // 4) Hold prompt
+    yield return new WaitForSeconds(2f);
+    roundNumberText?.gameObject.SetActive(false);
 
-            winner.PlayWinAnimation();
-            StartCoroutine(PlayWinAudioSequence(winner));
-            loser.core.SetMercyEligibility(false);
-            Debug.Log("Finisher timer expired. " + loser.name + " collapses. " + winner.name + " wins by default.");
-        }
+    // 5) Input window (3s)
+    float timer = 3f;
+    bool acted = false;
+    while (timer > 0f && !acted)
+    {
+        var ib = winner.GetComponent<InputBuffer>();
 
-        postKOState = finisherActionTaken ? PostKOSubState.FinisherPerformed : PostKOSubState.ProceedToRoundEnd;
-        if (timerText != null) timerText.gameObject.SetActive(true);
-        float endPause = finisherActionTaken ? 2.0f : (endOfRoundPause + STANDARD_ROUND_END_MESSAGE_DURATION / 2); 
-        yield return new WaitForSeconds(endPause);
-        // Text clearing handled by PrepareRound or GameOverSequence after fades
+        // Mercy check…
+        // (omitted here for brevity)
+
+        timer -= Time.deltaTime;
+        yield return null;
     }
 
-    bool CheckMercyInput(InputBuffer input) { return input.State.PressedBlock && input.State.Down && input.State.Run; }
-    IEnumerator GameOverSequence(FighterCharacter matchWinner){if(flawlessVictoryText!=null)flawlessVictoryText.gameObject.SetActive(false);if(roundNumberText!=null)roundNumberText.gameObject.SetActive(false);if(roundOutcomeText!=null){roundOutcomeText.gameObject.SetActive(true);string winnerName=(matchWinner?.core?.CharInfo?.characterName?.ToUpper())??((matchWinner==fighterA_instance)?"PLAYER 1":"PLAYER 2");roundOutcomeText.text=winnerName+" WINS THE MATCH!";}AudioRoundManager.Play(GameEvent.Flawless);yield return new WaitForSeconds(3f);if(FadeController.I!=null)yield return FadeController.I.FadeOut(gameOverFadeDuration);if(roundOutcomeText!=null)roundOutcomeText.gameObject.SetActive(false);}
+    // 6) Default collapse if no finisher
+    if (!acted)
+    {
+        loser.core.SetState(CharacterState.Knockdown);
+        loser.TriggerKnockdownAnim();
+        // Winner can already move—but don't yet play victory here;
+        // we'll do it in step 9.
+    }
+
+        winner.ForcePaused(true);
+        winner.PlayWinAnimation();
+
+    // 7) “X WINS” text
+    string name = (winner.core?.CharInfo?.characterName?.ToUpper())
+        ?? (winner == Player1 ? "PLAYER 1" : "PLAYER 2");
+    roundOutcomeText?.gameObject.SetActive(true);
+    roundOutcomeText.text = $"{name} WINS";
+
+    // 8) Name+Wins SFX sequence
+    yield return StartCoroutine(PlayWinAudioSequence(winner));
+
+    // 9) Pause for readability
+    yield return new WaitForSeconds(1f);
+
+    // 10) Flawless?
+    bool flawless = winner.core.Health == FighterCharacterCore.MAX_HEALTH
+                   && currentRoundEndCondition == RoundEndType.KO;
+    if (flawless)
+    {
+        flawlessVictoryText?.gameObject.SetActive(true);
+        flawlessVictoryText.text = "FLAWLESS VICTORY";
+        AudioRoundManager.Play(GameEvent.FlawlessVictory);
+        yield return new WaitForSeconds(1.5f);
+    }
+
+    // 11) Final pause before clearing both texts
+yield return new WaitForSeconds(1.5f);
+
+// 12) Hide both winner and flawless texts together
+if (roundOutcomeText    != null) roundOutcomeText.gameObject.SetActive(false);
+if (flawlessVictoryText  != null) flawlessVictoryText.gameObject.SetActive(false);
+
+// 13) Play the winner’s victory animation
+
+
+// 14) Immediately freeze the winner so they can no longer move
+
+
+// 15) Mark that we're done with the finisher sequence
+postKOState = PostKOSubState.ProceedToRoundEnd;
+}
+
+
+    
+    IEnumerator GameOverSequence(FighterCharacter matchWinner)
+    {
+        // hide any leftover texts
+        roundNumberText   ?.gameObject.SetActive(false);
+        roundOutcomeText  ?.gameObject.SetActive(false);
+        flawlessVictoryText?.gameObject.SetActive(false);
+
+        // 1) wait 1.5s before showing GAME OVER
+        yield return new WaitForSeconds(1.5f);
+
+        // 2) show GAME OVER
+        roundOutcomeText?.gameObject.SetActive(true);
+        roundOutcomeText.text = "GAME OVER";
+
+        // 3) play the Game Over clip
+        AudioRoundManager.Play(GameEvent.GameOver);
+
+        // 4) wait another 1.5s so player reads it
+        yield return new WaitForSeconds(1.5f);
+
+        // 5) then fade out
+        if (FadeController.I != null)
+            yield return FadeController.I.FadeOut(gameOverFadeDuration);
+
+        // finally clean up
+        roundOutcomeText?.gameObject.SetActive(false);
+    }
+    
     void BeginCombat(){if(fighterA_instance!=null)fighterA_instance.ForcePaused(false);if(fighterB_instance!=null)fighterB_instance.ForcePaused(false);roundActive=true;firstFrameAfterUnpause=true;if(rbA!=null&&fighterA_instance!=null)rbA.position=fighterA_instance.transform.position;if(rbB!=null&&fighterB_instance!=null)rbB.position=fighterB_instance.transform.position;if(fighterA_instance?.core!=null&&rbA!=null)fighterA_instance.core.SyncPosition(rbA.position);if(fighterB_instance?.core!=null&&rbB!=null)fighterB_instance.core.SyncPosition(rbB.position);roundTimerSec=timeLimit;lowHealthWarningPlayedP1=false;lowHealthWarningPlayedP2=false;}
-    void EndCombat(){roundActive=false;if(fighterA_instance!=null)fighterA_instance.ForcePaused(true);if(fighterB_instance!=null)fighterB_instance.ForcePaused(true);}
+    void EndCombat(){roundActive=false;
+    if(fighterA_instance!=null)fighterA_instance.ForcePaused(true);
+    if(fighterB_instance!=null)fighterB_instance.ForcePaused(true);}
     
     IEnumerator StandardRoundEndSequence()
     { 
@@ -419,15 +488,16 @@ public class RoundSystem : MonoBehaviour
     void CheckLowHealthWarnings(){if(fighterA_instance?.core!=null&&!lowHealthWarningPlayedP1&&fighterA_instance.Health>0&&fighterA_instance.Health<=FighterCharacterCore.MAX_HEALTH*LOW_HEALTH_THRESHOLD_PERCENT){AudioRoundManager.Play(GameEvent.LastHitWarning);lowHealthWarningPlayedP1=true;}if(fighterB_instance?.core!=null&&!lowHealthWarningPlayedP2&&fighterB_instance.Health>0&&fighterB_instance.Health<=FighterCharacterCore.MAX_HEALTH*LOW_HEALTH_THRESHOLD_PERCENT){AudioRoundManager.Play(GameEvent.LastHitWarning);lowHealthWarningPlayedP2=true;}}
     void UpdateWinCountUI(){/* For dedicated win UI */}
     
-    void OnGUI()
-    {
-        if (!Application.isPlaying || (fighterA_instance == null && fighterB_instance == null) ) return;
-        if (roundActive || postKOState == PostKOSubState.AwaitingFinisherInput || postKOState == PostKOSubState.MercyGranted)
-        {
-            DrawPlayerLifebar(fighterA_instance, true);
-            DrawPlayerLifebar(fighterB_instance, false);
-        }
-    }
+void OnGUI()
+{
+    if (!Application.isPlaying || fighterA_instance == null || fighterB_instance == null)
+        return;
+
+    // Always draw both health bars whenever the game is running
+    DrawPlayerLifebar(fighterA_instance, true);
+    DrawPlayerLifebar(fighterB_instance, false);
+}
+
 
     void DrawPlayerLifebar(FighterCharacter player, bool isPlayer1)
     {

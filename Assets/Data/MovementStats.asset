@@ -15,8 +15,8 @@ MonoBehaviour:
   walkForwardVelocity: 3.5
   walkBackVelocity: 2.5
   runVelocity: 5
-  jumpUpVelocity: 7
-  jumpForwardHorizontalVelocity: 6
+  jumpUpVelocity: 10
+  jumpForwardHorizontalVelocity: 5
   jumpBackHorizontalVelocity: 5
   jumpStartupFrames: 7
   gravityPerSecond: 25

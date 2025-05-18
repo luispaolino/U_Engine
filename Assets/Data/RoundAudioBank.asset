@@ -67,3 +67,7 @@ MonoBehaviour:
     resourcesPath: Arcade/Names/mk3-21120
     clip: {fileID: 8300000, guid: 55c384792d6c3de4d897dfcd8eec5417, type: 3}
     volume: 1
+  - evt: 13
+    resourcesPath: Arcade/ShaoKahn/mk3-09430
+    clip: {fileID: 8300000, guid: bfc212443a606e9459f8d18f9d0131f6, type: 3}
+    volume: 1
